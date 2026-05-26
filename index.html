@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kitchen Order Sheet</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
+      --text:#e6edf3;--muted:#7d8590;--accent:#58a6ff;
+      --green:#3fb950;--red:#f85149;--orange:#d29922;
+      --red-bg:rgba(248,81,73,0.08);--green-bg:rgba(63,185,80,0.08);
+    }
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+    /* ── Header ── */
+    .app-header{
+      position:sticky;top:0;z-index:50;
+      background:var(--surface);border-bottom:1px solid var(--border);
+      padding:0 24px;height:58px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+    }
+    .app-header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap}
+    .app-header h1 span{color:var(--muted);font-weight:400;font-size:13px}
+    .header-actions{display:flex;gap:8px;flex-shrink:0}
+    .btn{
+      height:32px;padding:0 14px;border-radius:6px;
+      border:1px solid var(--border);background:var(--surface2);
+      color:var(--text);font-size:13px;font-weight:500;
+      cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+      transition:all .15s;white-space:nowrap;
+    }
+    .btn:hover{background:var(--border);border-color:var(--muted)}
+    .btn-primary{background:var(--accent);border-color:var(--accent);color:#0d1117;font-weight:700}
+    .btn-primary:hover{opacity:.88;background:var(--accent)}
+    .btn-danger{background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.3);color:var(--red)}
+    .btn-danger:hover{background:rgba(248,81,73,.25)}
+
+    /* ── Stats bar ── */
+    .stats-bar{
+      background:var(--surface2);border-bottom:1px solid var(--border);
+      padding:9px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+    }
+    .stat{display:flex;align-items:center;gap:6px;font-size:13px}
+    .stat-label{color:var(--muted)}
+    .stat-value{font-weight:700}
+    .stat-value.red{color:var(--red)}
+    .stat-value.green{color:var(--green)}
+    .pill{
+      display:inline-flex;align-items:center;gap:4px;
+      padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;
+    }
+    .pill-red{background:var(--red-bg);color:var(--red);border:1px solid rgba(248,81,73,.2)}
+    .pill-muted{background:var(--surface);color:var(--muted);border:1px solid var(--border)}
+    .vendor-pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+
+    /* ── Layout ── */
+    .layout{display:flex}
+
+    /* ── Sidebar ── */
+    .sidebar{
+      width:196px;flex-shrink:0;
+      background:var(--surface);border-right:1px solid var(--border);
+      padding:12px 0;
+      position:sticky;top:105px;
+      height:calc(100vh - 105px);overflow-y:auto;
+    }
+    .sidebar-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:8px 16px 4px}
+    .sidebar-item{
+      display:flex;align-items:center;gap:8px;
+      padding:7px 16px;font-size:13px;color:var(--muted);
+      cursor:pointer;transition:all .1s;
+      border-left:2px solid transparent;text-decoration:none;
+    }
+    .sidebar-item:hover{color:var(--text);background:var(--surface2)}
+    .sidebar-item.active{color:var(--text);border-left-color:var(--accent);background:rgba(88,166,255,.07)}
+    .sidebar-item .s-icon{font-size:14px;flex-shrink:0}
+    .sidebar-item .s-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sidebar-item .s-count{
+      font-size:10px;font-weight:700;color:var(--red);
+      background:var(--red-bg);padding:1px 6px;border-radius:10px;
+      display:none;flex-shrink:0;
+    }
+    .sidebar-item .s-count.show{display:block}
+
+    /* ── Content ── */
+    .content{flex:1;padding:24px;overflow-x:hidden}
+
+    /* ── Category section ── */
+    .cat-section{margin-bottom:36px;scroll-margin-top:115px}
+    .cat-title{
+      font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;
+      color:var(--muted);margin-bottom:12px;padding-bottom:8px;
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:10px;
+    }
+    .cat-badge{
+      font-size:11px;font-weight:700;color:var(--red);
+      background:var(--red-bg);padding:1px 8px;border-radius:10px;
+      letter-spacing:0;display:none;
+    }
+    .cat-badge.show{display:inline-flex}
+
+    /* ── Items grid ── */
+    .items-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+
+    /* ── Item card ── */
+    .item-card{
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:8px;padding:12px 14px;transition:border-color .15s;
+    }
+    .item-card.needs-order{border-color:rgba(248,81,73,.45);background:rgba(248,81,73,.04)}
+    .card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px}
+    .item-name{font-size:13px;font-weight:600;line-height:1.3}
+    .vendor-tag{
+      font-size:10px;color:var(--muted);background:var(--surface2);
+      padding:2px 7px;border-radius:4px;white-space:nowrap;flex-shrink:0;
+      border:1px solid var(--border);
+    }
+    .card-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end}
+    .field{display:flex;flex-direction:column;gap:3px}
+    .field-label{font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+    .field-static{font-size:20px;font-weight:700;color:var(--muted);line-height:1.1}
+    .order-qty{font-size:20px;font-weight:700;line-height:1.1}
+    .order-qty.positive{color:var(--red)}
+    .order-qty.zero{color:var(--green)}
+    .order-qty.empty{color:var(--muted)}
+    .field input[type=number]{
+      width:100%;background:var(--surface2);border:1px solid var(--border);
+      border-radius:6px;color:var(--text);font-size:20px;font-weight:700;
+      padding:4px 6px;text-align:center;outline:none;
+      -moz-appearance:textfield;transition:border-color .15s;
+    }
+    .field input[type=number]::-webkit-outer-spin-button,
+    .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .field input[type=number]:focus{border-color:var(--accent)}
+    .item-card.needs-order .field input[type=number]{border-color:rgba(248,81,73,.3)}
+    .card-footer{
+      margin-top:8px;font-size:10px;color:var(--muted);
+      display:flex;justify-content:space-between;
+    }
+
+    /* ── Vendor panel ── */
+    .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100}
+    .overlay.open{display:block}
+    .vendor-panel{
+      position:fixed;top:0;right:-430px;bottom:0;width:430px;
+      background:var(--surface);border-left:1px solid var(--border);
+      z-index:101;overflow-y:auto;transition:right .25s ease;
+    }
+    .vendor-panel.open{right:0}
+    .panel-header{
+      padding:18px 20px;border-bottom:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:center;
+      position:sticky;top:0;background:var(--surface);z-index:1;
+    }
+    .panel-header h2{font-size:15px;font-weight:600}
+    .close-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:0 4px}
+    .close-btn:hover{color:var(--text)}
+    .vendor-section{padding:14px 20px;border-bottom:1px solid var(--border)}
+    .vendor-section h3{
+      font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+      color:var(--muted);margin-bottom:10px;
+    }
+    .vendor-section h3 em{color:var(--red);font-style:normal;margin-left:6px;font-size:12px}
+    .vendor-row{
+      display:flex;align-items:center;padding:7px 0;font-size:13px;
+      border-bottom:1px solid rgba(48,54,61,.5);
+    }
+    .vendor-row:last-child{border-bottom:none}
+    .v-name{flex:1}
+    .v-qty{font-weight:700;color:var(--red);margin-left:12px;font-size:15px;min-width:24px;text-align:right}
+    .v-price{color:var(--muted);font-size:11px;margin-left:8px;min-width:50px;text-align:right}
+    .no-orders{padding:32px 20px;color:var(--muted);font-size:13px;text-align:center;line-height:1.6}
+
+    /* ── Print ── */
+    @media print{
+      .app-header .header-actions,.stats-bar .vendor-pills,.sidebar,.overlay,.vendor-panel{display:none!important}
+      .app-header{position:relative;height:auto;padding:12px 20px}
+      .layout{display:block}
+      .content{padding:8px}
+      .items-grid{grid-template-columns:repeat(4,1fr);gap:6px}
+      .item-card{break-inside:avoid;border:1px solid #ccc;background:white;padding:8px}
+      .item-card.needs-order{border-color:#c00;background:#fff5f5}
+      body,.item-name,.vendor-tag{background:white;color:#111}
+      .vendor-tag{background:#eee;color:#555;border-color:#ddd}
+      .field-label,.card-footer{color:#666}
+      .field-static{color:#333}
+      .order-qty.positive{color:#c00}
+      .order-qty.zero{color:#090}
+      .field input[type=number]{background:#f5f5f5;border-color:#ccc;color:#111}
+      .cat-title{color:#444;border-color:#ccc}
+    }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🍽️ Kitchen Order Sheet <span id="dateLabel"></span></h1>
+  <div class="header-actions">
+    <button class="btn btn-danger" onclick="resetAll()">↺ Reset</button>
+    <button class="btn" onclick="togglePanel()">📋 By Vendor</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
+  </div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat"><span class="stat-label">Need to Order</span><span class="stat-value red" id="needCount">–</span></div>
+  <div class="stat"><span class="stat-label">Stocked</span><span class="stat-value green" id="stockedCount">–</span></div>
+  <div class="stat"><span class="stat-label">Not Counted</span><span class="stat-value" id="uncountedCount">–</span></div>
+  <div class="vendor-pills" id="vendorPills"></div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="content" id="content"></main>
+</div>
+
+<div class="overlay" id="overlay" onclick="togglePanel()"></div>
+<div class="vendor-panel" id="vendorPanel">
+  <div class="panel-header">
+    <h2>Orders by Vendor</h2>
+    <button class="close-btn" onclick="togglePanel()">×</button>
+  </div>
+  <div id="vendorPanelBody"></div>
+</div>
+
+<script>
+const CATEGORIES = [
+  {
+    id:"paper", name:"Paper Goods", icon:"📋",
+    items:[
+      {id:1,  name:"Thermal Paper",             buildTo:2,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:2,  name:"Use First Stickers",         buildTo:2,  vendor:"GFS",        price:null,   unit:""},
+      {id:3,  name:"Labels",                     buildTo:2,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:4,  name:"Shopping Bags",              buildTo:1,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:5,  name:"Tamperproof Bags",           buildTo:2,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:6,  name:"Portion Bags",               buildTo:2,  vendor:"I SUPPLY",   price:50.40,  unit:""},
+    ]
+  },
+  {
+    id:"spices", name:"Spice Shelf", icon:"🌶️",
+    items:[
+      {id:7,  name:"Holy Gospel",                buildTo:8,  vendor:"Meat Church",price:39.00,  unit:"5 LB"},
+      {id:8,  name:"Holy Cow",                   buildTo:6,  vendor:"Meat Church",price:39.00,  unit:"5 LB"},
+      {id:9,  name:"Holy Voodoo",                buildTo:6,  vendor:"Meat Church",price:39.00,  unit:"5 LB"},
+      {id:10, name:"Blanco",                     buildTo:6,  vendor:"Meat Church",price:39.00,  unit:"5 LB"},
+      {id:11, name:"Coarse Ground Black Pepper", buildTo:1,  vendor:"US FOODS",   price:95.40,  unit:"5 LB"},
+      {id:12, name:"Taco Seasoning Mix",         buildTo:1,  vendor:"US FOODS",   price:15.59,  unit:"21 OZ"},
+      {id:13, name:"Garlic Powder",              buildTo:1,  vendor:"US FOODS",   price:11.71,  unit:"21 OZ"},
+      {id:14, name:"Italian Seasoning",          buildTo:1,  vendor:"US FOODS",   price:11.56,  unit:"6 OZ"},
+      {id:15, name:"Hungarian Style Paprika",    buildTo:1,  vendor:"US FOODS",   price:19.25,  unit:"18 OZ"},
+      {id:16, name:"Kosher Salt",                buildTo:1,  vendor:"US FOODS",   price:31.46,  unit:"12/3 LB"},
+    ]
+  },
+  {
+    id:"tortillas", name:"Tortilla Shelf", icon:"🫓",
+    items:[
+      {id:17, name:'Tortilla, Flour 12"',        buildTo:5,  vendor:"US FOODS",   price:29.53,  unit:"8/12"},
+      {id:18, name:'Tortilla, Flour 6"',         buildTo:6,  vendor:"US FOODS",   price:30.66,  unit:"12/24"},
+    ]
+  },
+  {
+    id:"drystock", name:"Dry Stock", icon:"🏪",
+    items:[
+      {id:19, name:"Garlic Parmesan",            buildTo:9,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL"},
+      {id:20, name:"Yellow Mustard",             buildTo:4,  vendor:"PFG",        price:18.20,  unit:"4/1 GAL"},
+      {id:24, name:"Ketchup Packets",            buildTo:3,  vendor:"PFG",        price:23.25,  unit:"1000/9G"},
+      {id:25, name:"Mustard Packets",            buildTo:3,  vendor:"PFG",        price:15.00,  unit:"500/7G"},
+      {id:27, name:"Mayo Packets",               buildTo:3,  vendor:"PFG",        price:46.72,  unit:"500/9G"},
+      {id:29, name:"Golden Sauce",               buildTo:15, vendor:"SYSCO",      price:null,   unit:"2/1 GAL"},
+      {id:30, name:"Blended Oil",                buildTo:5,  vendor:"US FOODS",   price:99.87,  unit:"4/1 GAL"},
+      {id:31, name:"Olive Oil",                  buildTo:1,  vendor:"PFG",        price:130.51, unit:"10 L"},
+      {id:33, name:"Buffalo Sauce",              buildTo:3,  vendor:"PFG",        price:71.25,  unit:"4/1 GAL"},
+      {id:34, name:"Pizza Sauce",                buildTo:6,  vendor:"PFG",        price:42.88,  unit:"6/#10"},
+      {id:37, name:"Bulk Sugar",                 buildTo:1,  vendor:"US FOODS",   price:35.53,  unit:"8/5 LB"},
+      {id:38, name:"BBQ Sauce",                  buildTo:4,  vendor:"PFG",        price:58.39,  unit:"4/1 GAL"},
+      {id:41, name:"Maraschino Cherries",        buildTo:3,  vendor:"US FOODS",   price:88.04,  unit:"6/½ GAL"},
+      {id:42, name:"Cholula",                    buildTo:1,  vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ"},
+      {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G"},
+      {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL"},
+      {id:47, name:"Fire Roasted Salsa",         buildTo:8,  vendor:"US FOODS",   price:53.28,  unit:"4/68 OZ"},
+      {id:50, name:"Black Beans",                buildTo:3,  vendor:"PFG",        price:91.25,  unit:"24/15.5oz"},
+      {id:51, name:"Shortening",                 buildTo:28, vendor:"US FOODS",   price:31.03,  unit:"35 LB"},
+      {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB"},
+    ]
+  },
+  {
+    id:"disposables", name:"Disposables", icon:"🥡",
+    items:[
+      {id:53, name:"To-Go Black Base Clear Top", buildTo:2,  vendor:"I SUPPLY",   price:null,   unit:""},
+      {id:54, name:"Styrofoam To-Go Containers", buildTo:4,  vendor:"I SUPPLY",   price:23.99,  unit:"200"},
+      {id:55, name:"Can Liners",                 buildTo:6,  vendor:"I SUPPLY",   price:24.99,  unit:"5 Rolls"},
+      {id:56, name:"Deli Paper",                 buildTo:3,  vendor:"US FOODS",   price:83.09,  unit:"12/500"},
+      {id:57, name:"Straws",                     buildTo:2,  vendor:"I SUPPLY",   price:17.99,  unit:"4/500"},
+      {id:58, name:"2 oz To-Go Cups",            buildTo:2,  vendor:"I SUPPLY",   price:29.50,  unit:"2500"},
+      {id:63, name:"2 oz Lids",                  buildTo:2,  vendor:"I SUPPLY",   price:26.99,  unit:"2500"},
+      {id:64, name:"Foil Sheets",                buildTo:2,  vendor:"I SUPPLY",   price:null,   unit:"6/500"},
+      {id:65, name:"Cutlery Kits",               buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:"250"},
+      {id:66, name:"Savaday",                    buildTo:2,  vendor:"US FOODS",   price:110.99, unit:"2/250"},
+      {id:67, name:"Napkins C Fold",             buildTo:7,  vendor:"I SUPPLY",   price:33.50,  unit:"24 Packs"},
+      {id:68, name:"T-Shirt Bags",               buildTo:1,  vendor:"I SUPPLY",   price:18.99,  unit:"500"},
+      {id:69, name:"Plastic Wrap",               buildTo:1,  vendor:"I SUPPLY",   price:23.89,  unit:"2000'"},
+      {id:70, name:"Aluminum Foil Roll",         buildTo:1,  vendor:"US FOODS",   price:103.49, unit:"18×1000"},
+      {id:71, name:"Pizza Boxes",                buildTo:4,  vendor:"PFG",        price:null,   unit:"50 CT"},
+    ]
+  },
+  {
+    id:"walkin", name:"Walk-In Cooler", icon:"❄️",
+    items:[
+      {id:72, name:"Baby Carrots",               buildTo:1,  vendor:"US FOODS",   price:27.90,  unit:"4/5 LB"},
+      {id:73, name:"Broccoli",                   buildTo:3,  vendor:"PFG",        price:35.89,  unit:"20 LB"},
+      {id:74, name:"Green Onions",               buildTo:2,  vendor:"US FOODS",   price:23.37,  unit:"4/2 LB"},
+      {id:75, name:"Cucumbers",                  buildTo:1,  vendor:"PFG",        price:10.32,  unit:"12 EA"},
+      {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
+      {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
+      {id:79, name:"Burger Patties",             buildTo:11, vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
+      {id:81, name:"Double Lobe Chicken Breasts",buildTo:8,  vendor:"US FOODS",   price:94.75,  unit:"4/5 LB"},
+      {id:82, name:"Chicken Wings",              buildTo:15, vendor:"US FOODS",   price:51.38,  unit:"40 LB"},
+      {id:83, name:"Assorted Peppers",           buildTo:1,  vendor:"US FOODS",   price:22.63,  unit:"5 LB"},
+      {id:84, name:"Cherry Tomatoes",            buildTo:1,  vendor:"US FOODS",   price:27.92,  unit:"10 LB"},
+      {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#"},
+      {id:92, name:"Pecorino Romano Blend",      buildTo:1,  vendor:"PFG",        price:110.05, unit:"4/5 LB"},
+      {id:93, name:"Parmesan Cheese",            buildTo:1,  vendor:"US FOODS",   price:63.98,  unit:"2/5 LB"},
+      {id:94, name:"Mild Cheddar Cheese",        buildTo:3,  vendor:"US FOODS",   price:66.25,  unit:"4/5 LB"},
+      {id:95, name:"Oranges",                    buildTo:2,  vendor:"US FOODS",   price:51.69,  unit:"88 CT"},
+      {id:96, name:"Limes",                      buildTo:2,  vendor:"PFG",        price:21.55,  unit:"48 EA"},
+      {id:97, name:"Sliced Red Tomatoes",        buildTo:2,  vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
+      {id:98, name:"Sliced Red Onions",          buildTo:2,  vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
+      {id:99, name:"Diced Tomatoes",             buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
+      {id:43, name:"Diced Red Onions",           buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
+      {id:104,name:"Pizza Cheese",               buildTo:3,  vendor:"PFG",        price:95.69,  unit:"6/5 LB"},
+      {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
+      {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL"},
+      {id:110,name:"Sour Cream",                 buildTo:2,  vendor:"US FOODS",   price:34.58,  unit:"4/5 LB"},
+      {id:111,name:"Pickles",                    buildTo:1,  vendor:"PFG",        price:35.68,  unit:"5 GAL"},
+      {id:112,name:"Bacon Toppings",             buildTo:2,  vendor:"US FOODS",   price:82.59,  unit:"2/5 LB"},
+      {id:113,name:"Sliced Bacon",               buildTo:3,  vendor:"PFG",        price:76.44,  unit:"15 LB"},
+    ]
+  },
+  {
+    id:"freezer", name:"Freezer", icon:"🧊",
+    items:[
+      {id:114,name:"Potato Hamburger Bun",       buildTo:6,  vendor:"US FOODS",   price:29.00,  unit:"5/12"},
+      {id:115,name:"Fries",                      buildTo:40, vendor:"PFG",        price:42.02,  unit:"6/5 LB"},
+      {id:116,name:"Flatbread Dough",            buildTo:10, vendor:"PFG",        price:63.34,  unit:"28/1"},
+      {id:117,name:"Pepperoni",                  buildTo:4,  vendor:"PFG",        price:59.85,  unit:"10 LB"},
+      {id:119,name:"Fajita Chicken",             buildTo:6,  vendor:"PFG",        price:63.16,  unit:"2/5 LB"},
+      {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
+      {id:121,name:"JTM Taco Meat",              buildTo:8,  vendor:"US FOODS",   price:74.17,  unit:"4/5 LB"},
+      {id:122,name:"Tenders",                    buildTo:21, vendor:"PFG",        price:32.98,  unit:"2/5 LB"},
+      {id:123,name:"Boneless Wings",             buildTo:12, vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
+      {id:125,name:"Milwaukee Pretzel",          buildTo:20, vendor:"US FOODS",   price:58.25,  unit:"8/24 OZ"},
+      {id:126,name:"David's Cookies",            buildTo:4,  vendor:"US FOODS",   price:83.21,  unit:"80/4.5 OZ"},
+      {id:127,name:"Pretzel Bites",              buildTo:5,  vendor:"PFG",        price:47.31,  unit:"500/.4 OZ"},
+      {id:128,name:"Tater Kegs",                 buildTo:12, vendor:"US FOODS",   price:41.37,  unit:"10 LB"},
+    ]
+  },
+  {
+    id:"chemicals", name:"Chemical Room", icon:"🧴",
+    items:[
+      {id:129,name:"Eco Lyzer",                  buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:"4/1 GAL"},
+      {id:130,name:"Delimer",                    buildTo:3,  vendor:"US FOODS",   price:116.80, unit:"4/1 GAL"},
+      {id:131,name:"Oven Cleaner",               buildTo:3,  vendor:"US FOODS",   price:60.34,  unit:"6/20 oz"},
+      {id:133,name:"Stainless Steel Polish",     buildTo:3,  vendor:"PFG",        price:null,   unit:"6/16 OZ"},
+      {id:134,name:"Solid Dish Detergent",       buildTo:2,  vendor:"US FOODS",   price:116.90, unit:"2/9 LB"},
+      {id:135,name:"Degreaser",                  buildTo:2,  vendor:"US FOODS",   price:57.74,  unit:"6/32 oz"},
+      {id:136,name:"Pot & Pan Detergent",        buildTo:2,  vendor:"US FOODS",   price:86.51,  unit:"1 EA"},
+      {id:137,name:"Pre Soak",                   buildTo:2,  vendor:"US FOODS",   price:81.60,  unit:"1 EA"},
+      {id:138,name:"Heavy Duty Rinse Additive",  buildTo:2,  vendor:"US FOODS",   price:110.43, unit:"1 EA"},
+      {id:139,name:"Low Temp Sanitizer",         buildTo:2,  vendor:"US FOODS",   price:43.18,  unit:"1 EA"},
+      {id:140,name:"Sanitizing Floor Cleaner",   buildTo:2,  vendor:"US FOODS",   price:null,   unit:"1 EA"},
+      {id:141,name:"Quat Sanitizer",             buildTo:2,  vendor:"US FOODS",   price:78.63,  unit:"1 EA"},
+      {id:142,name:"Dishmachine Detergent",      buildTo:2,  vendor:"US FOODS",   price:116.30, unit:"1 EA"},
+      {id:144,name:"Stainless Steel Scrubber",   buildTo:1,  vendor:"US FOODS",   price:41.31,  unit:"6/12"},
+      {id:145,name:"Green Scrubbies",            buildTo:1,  vendor:"US FOODS",   price:9.55,   unit:"20 EA"},
+      {id:146,name:"M Nitrile Gloves",           buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:"10/100"},
+      {id:147,name:"L Nitrile Gloves",           buildTo:4,  vendor:"I SUPPLY",   price:29.95,  unit:"10/100"},
+      {id:148,name:"XL Nitrile Gloves",          buildTo:4,  vendor:"I SUPPLY",   price:59.95,  unit:"10/100"},
+      {id:149,name:"Fryer Filters",              buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:""},
+    ]
+  },
+  {
+    id:"beverage", name:"Beverage Dock", icon:"🍹",
+    items:[
+      {id:150,name:"Daily's Sweet & Sour Mix",   buildTo:4,  vendor:"US FOODS",   price:38.36,  unit:"4/1 GAL"},
+      {id:151,name:"Chafing Fuel Can 6 Hour",    buildTo:2,  vendor:"US FOODS",   price:71.80,  unit:"24 CT"},
+      {id:152,name:"Aluminum 1/2 Pans",          buildTo:4,  vendor:"US FOODS",   price:91.89,  unit:""},
+      {id:153,name:"Aluminum 1/3 Pans",          buildTo:4,  vendor:"US FOODS",   price:null,   unit:""},
+    ]
+  },
+];
+
+// ── State ──────────────────────────────────────────────
+const STATE_KEY = 'kitchen_order_v1';
+let state = {};
+
+function loadState(){
+  try{ const s = localStorage.getItem(STATE_KEY); if(s) state = JSON.parse(s); }catch(e){}
+}
+function saveState(){ try{ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }catch(e){} }
+function getOnHand(id){ return state[id] !== undefined ? state[id] : ''; }
+function setOnHand(id, val){
+  if(val===''||val===null){ delete state[id]; } else { state[id]=parseFloat(val); }
+  saveState();
+}
+
+function calcOrder(buildTo, raw){
+  if(raw===''||raw===undefined||raw===null) return null;
+  return Math.max(0, Math.ceil(buildTo - parseFloat(raw)));
+}
+
+// ── Render sidebar ──────────────────────────────────────
+function renderSidebar(){
+  document.getElementById('sidebar').innerHTML =
+    '<div class="sidebar-label">Sections</div>' +
+    CATEGORIES.map(c=>`
+      <a class="sidebar-item" href="#${c.id}">
+        <span class="s-icon">${c.icon}</span>
+        <span class="s-name">${c.name}</span>
+        <span class="s-count" id="sc-${c.id}"></span>
+      </a>`).join('');
+}
+
+// ── Render content ──────────────────────────────────────
+function renderContent(){
+  document.getElementById('content').innerHTML = CATEGORIES.map(cat=>`
+    <section class="cat-section" id="${cat.id}">
+      <div class="cat-title">
+        ${cat.icon} ${cat.name}
+        <span class="cat-badge" id="cb-${cat.id}"></span>
+      </div>
+      <div class="items-grid">${cat.items.map(renderCard).join('')}</div>
+    </section>`).join('');
+}
+
+function renderCard(item){
+  const oh = getOnHand(item.id);
+  const qty = calcOrder(item.buildTo, oh);
+  const needsOrder = qty !== null && qty > 0;
+  const orderText = qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
+  return `
+    <div class="item-card${needsOrder?' needs-order':''}" id="card-${item.id}">
+      <div class="card-top">
+        <div class="item-name">${item.name}</div>
+        <div class="vendor-tag">${item.vendor}</div>
+      </div>
+      <div class="card-fields">
+        <div class="field">
+          <div class="field-label">PAR</div>
+          <div class="field-static">${item.buildTo}</div>
+        </div>
+        <div class="field">
+          <div class="field-label">On Hand</div>
+          <input type="number" min="0" step="0.5"
+            value="${oh}"
+            placeholder="–"
+            oninput="updateItem(${item.id},this.value)"
+            id="inp-${item.id}" />
+        </div>
+        <div class="field">
+          <div class="field-label">Order</div>
+          <div class="order-qty ${orderCls}" id="oq-${item.id}">${orderText}</div>
+        </div>
+      </div>
+      ${(item.price||item.unit)?`<div class="card-footer">
+        <span>${item.unit||''}</span>
+        ${item.price?`<span>$${item.price.toFixed(2)}</span>`:''}
+      </div>`:''}
+    </div>`;
+}
+
+// ── Live update ─────────────────────────────────────────
+function updateItem(id, val){
+  setOnHand(id, val==='' ? '' : val);
+  let item;
+  for(const cat of CATEGORIES){ item=cat.items.find(i=>i.id===id); if(item) break; }
+  if(!item) return;
+
+  const oh = val==='' ? '' : parseFloat(val);
+  const qty = calcOrder(item.buildTo, oh);
+  const needsOrder = qty!==null && qty>0;
+  const orderText = qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
+
+  document.getElementById(`oq-${id}`).textContent = orderText;
+  document.getElementById(`oq-${id}`).className = `order-qty ${orderCls}`;
+  document.getElementById(`card-${id}`).className = `item-card${needsOrder?' needs-order':''}`;
+  updateStats();
+}
+
+// ── Stats ───────────────────────────────────────────────
+function updateStats(){
+  let need=0, stocked=0, uncounted=0;
+  const vendorCounts={};
+
+  for(const cat of CATEGORIES){
+    let catNeed=0;
+    for(const item of cat.items){
+      const oh=getOnHand(item.id);
+      if(oh===''||oh===undefined){ uncounted++; continue; }
+      const qty=calcOrder(item.buildTo, oh);
+      if(qty>0){
+        need++; catNeed++;
+        vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
+      } else { stocked++; }
+    }
+    const sc=document.getElementById(`sc-${cat.id}`);
+    const cb=document.getElementById(`cb-${cat.id}`);
+    if(catNeed>0){
+      sc.textContent=catNeed; sc.classList.add('show');
+      cb.textContent=`${catNeed} to order`; cb.classList.add('show');
+    } else {
+      sc.classList.remove('show');
+      cb.classList.remove('show');
+    }
+  }
+
+  document.getElementById('needCount').textContent=need;
+  document.getElementById('stockedCount').textContent=stocked;
+  document.getElementById('uncountedCount').textContent=uncounted;
+
+  document.getElementById('vendorPills').innerHTML=
+    Object.entries(vendorCounts)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([v,c])=>`<span class="pill pill-red">${v} <strong>${c}</strong></span>`)
+      .join('');
+}
+
+// ── Vendor panel ────────────────────────────────────────
+function togglePanel(){
+  const panel=document.getElementById('vendorPanel');
+  const overlay=document.getElementById('overlay');
+  const opening=!panel.classList.contains('open');
+  if(opening) buildVendorPanel();
+  panel.classList.toggle('open',opening);
+  overlay.classList.toggle('open',opening);
+}
+
+function buildVendorPanel(){
+  const vendorMap={};
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      const oh=getOnHand(item.id);
+      if(oh===''||oh===undefined) continue;
+      const qty=calcOrder(item.buildTo, oh);
+      if(qty>0){
+        if(!vendorMap[item.vendor]) vendorMap[item.vendor]=[];
+        vendorMap[item.vendor].push({...item, orderQty:qty});
+      }
+    }
+  }
+  const vendors=Object.keys(vendorMap).sort();
+  const body=document.getElementById('vendorPanelBody');
+  if(!vendors.length){
+    body.innerHTML='<div class="no-orders">No items to order yet.<br>Enter on-hand counts to generate your order list.</div>';
+    return;
+  }
+  body.innerHTML=vendors.map(v=>`
+    <div class="vendor-section">
+      <h3>${v}<em>${vendorMap[v].length} item${vendorMap[v].length>1?'s':''}</em></h3>
+      ${vendorMap[v].map(item=>`
+        <div class="vendor-row">
+          <span class="v-name">${item.name}</span>
+          <span class="v-qty">${item.orderQty}</span>
+          ${item.price?`<span class="v-price">$${item.price.toFixed(2)}</span>`:'<span class="v-price"></span>'}
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+// ── Reset ───────────────────────────────────────────────
+function resetAll(){
+  if(!confirm('Clear all on-hand counts and start over?')) return;
+  state={};
+  saveState();
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      const inp=document.getElementById(`inp-${item.id}`);
+      if(inp) inp.value='';
+      const oq=document.getElementById(`oq-${item.id}`);
+      if(oq){ oq.textContent='–'; oq.className='order-qty empty'; }
+      const card=document.getElementById(`card-${item.id}`);
+      if(card) card.className='item-card';
+    }
+  }
+  updateStats();
+}
+
+// ── Init ────────────────────────────────────────────────
+loadState();
+renderSidebar();
+renderContent();
+updateStats();
+
+document.getElementById('dateLabel').textContent =
+  new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+// Highlight active sidebar section on scroll
+const io = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      document.querySelectorAll('.sidebar-item').forEach(el=>{
+        el.classList.toggle('active', el.getAttribute('href')==='#'+e.target.id);
+      });
+    }
+  });
+},{threshold:0.25,rootMargin:'-110px 0px -55% 0px'});
+document.querySelectorAll('.cat-section').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
