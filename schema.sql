@@ -138,6 +138,19 @@ JOIN (
 ) cp_max ON cp_max.item_id = bi.item_id
 GROUP BY b.id, b.name, b.total_cost;
 
+-- VENDOR TOKENS (rotating API credentials per vendor) ----
+-- Used for vendors whose portals expose an internal REST API
+-- (US Foods panamax-api, and others discovered via intercept_api.py).
+-- In GitHub Actions the refresh token is stored as the USF_REFRESH_TOKEN
+-- secret and rotated after each run. This table is for local / dashboard use.
+CREATE TABLE IF NOT EXISTS vendor_tokens (
+  id            SERIAL PRIMARY KEY,
+  vendor_id     INT  NOT NULL REFERENCES vendors(id) UNIQUE,
+  refresh_token TEXT,
+  config_json   JSONB NOT NULL DEFAULT '{}',
+  updated_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- RLS: enable row-level security on sensitive tables ------
 ALTER TABLE pricing     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE baskets     ENABLE ROW LEVEL SECURITY;

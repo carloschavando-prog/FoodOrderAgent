@@ -1,0 +1,30 @@
+name: Scrape Vendor Prices
+
+on:
+  schedule:
+    # Monday 6:00 AM Eastern (11:00 UTC — EDT offset)
+    - cron: '0 11 * * 1'
+    # Thursday 6:00 AM Eastern (11:00 UTC)
+    - cron: '0 11 * * 4'
+  workflow_dispatch:   # allow manual trigger from GitHub UI
+
+jobs:
+  usfoods:
+    name: US Foods
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Scrape US Foods Fall 2025 prices
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          USF_REFRESH_TOKEN:  ${{ secrets.USF_REFRESH_TOKEN }}
+          USF_CONFIG:         ${{ secrets.USF_CONFIG }}
+          GH_PAT:             ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+        run: python3 scrape_usfoods.py
