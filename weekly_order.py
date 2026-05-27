@@ -25,7 +25,7 @@ Usage:
     python3 weekly_order.py
 """
 
-import json, os, re, webbrowser, datetime, urllib.request
+import json, math, os, re, sys, webbrowser, datetime, urllib.request, argparse
 from collections import defaultdict
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -79,7 +79,12 @@ def sb_get(path):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_data():
+def load_data(on_hand=None):
+    """
+    on_hand: optional dict {item_name_lower: on_hand_float}
+    When provided, order_qty = max(0, ceil(par_level - on_hand))
+    When None, order_qty = par_level  (standard par-cycle run)
+    """
     print("→ Loading items...")
     raw_items = sb_get("items?select=id,name,category_id,pack_size,par_level,"
                        "preferred_vendor_id&order=id.asc")
@@ -97,13 +102,24 @@ def load_data():
         ids.sort()
         can_id = ids[0]
         item   = id_to_item[can_id]
+        par = float(item.get("par_level") or 0)
+        if on_hand is not None:
+            oh  = on_hand.get(item["name"].lower().strip())
+            if oh is not None:
+                qty = max(0.0, math.ceil(par - float(oh)))
+            else:
+                qty = par   # not counted → fall back to full par
+        else:
+            qty = par
+
         canonical_items.append({
-            "id":           can_id,
-            "all_ids":      ids,
-            "name":         item["name"],
-            "category_id":  item["category_id"],
-            "pack_size":    item.get("pack_size") or "",
-            "par_level":    float(item.get("par_level") or 0),
+            "id":            can_id,
+            "all_ids":       ids,
+            "name":          item["name"],
+            "category_id":   item["category_id"],
+            "pack_size":     item.get("pack_size") or "",
+            "par_level":     par,
+            "order_qty":     qty,
             "preferred_vid": item.get("preferred_vendor_id"),
         })
     # Sort by category, then name
@@ -175,7 +191,7 @@ def calc_totals(assignment, items_by_id, best_prices):
 
     for can_id, vid in assignment.items():
         item  = items_by_id[can_id]
-        cases = int(item["par_level"]) if item["par_level"] > 0 else 1
+        cases = int(item["order_qty"]) if item["order_qty"] > 0 else 1
         pdata = best_prices[can_id][vid]
         price = pdata["price"]
         apn   = pdata.get("apn", "")
@@ -209,7 +225,7 @@ def optimize_basket(canonical_items, best_prices):
         # Greedy: cheapest active vendor per item
         assignment = {}
         for ci in canonical_items:
-            if ci["par_level"] <= 0:
+            if ci["order_qty"] <= 0:
                 continue
             opts = {
                 v: best_prices[ci["id"]][v]
@@ -464,6 +480,7 @@ def build_html(
     assignment, dropped, unassigned, notes,
     canonical_items, best_prices,
     savings_rows, total_saved,
+    from_count=False,
 ):
     items_by_id   = {ci["id"]: ci for ci in canonical_items}
     vendor_items, vendor_cases, vendor_spend = calc_totals(
@@ -473,6 +490,7 @@ def build_html(
     now         = datetime.datetime.now()
     date_str    = now.strftime("%A, %B %d, %Y")
     time_str    = now.strftime("%I:%M %p")
+    mode_label  = "From Inventory Count" if from_count else "Full Par-Level Order"
     grand_total = sum(vendor_spend.values())
     total_cases = sum(vendor_cases.values())
 
@@ -501,7 +519,7 @@ def build_html(
 <div class="page-header">
   <div>
     <h1>📋  Weekly Food Order</h1>
-    <div class="meta">On Par Bar &amp; Grill &nbsp;·&nbsp; {date_str} &nbsp;·&nbsp; Generated {time_str}</div>
+    <div class="meta">On Par Bar &amp; Grill &nbsp;·&nbsp; {date_str} &nbsp;·&nbsp; Generated {time_str} &nbsp;·&nbsp; {mode_label}</div>
   </div>
   <div style="text-align:right;font-size:.85rem;opacity:.8">
     {len(assignment)} items ordered &nbsp;|&nbsp;
@@ -643,7 +661,7 @@ def build_html(
             pref_vid  = ci["preferred_vid"]
             pref_name = (VENDOR_NAMES.get(pref_vid)
                          or other_vendors.get(pref_vid, f"Vendor {pref_vid}"))
-            cases = int(ci["par_level"]) if ci["par_level"] > 0 else "?"
+            cases = int(ci["order_qty"]) if ci["order_qty"] > 0 else "?"
             note  = "No broadliner price on file"
             html.append(f"""
       <tr>
@@ -727,11 +745,28 @@ def build_html(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    parser = argparse.ArgumentParser(description="On Par Weekly Food Order Generator")
+    parser.add_argument(
+        "--from-count", metavar="FILE",
+        help="JSON file with {item_name: on_hand_qty} from the inventory count sheet. "
+             "When provided, order quantities = max(0, PAR - on_hand). "
+             "Without this flag, order quantities = full PAR level."
+    )
+    args = parser.parse_args()
+
+    on_hand = None
+    if args.from_count:
+        with open(args.from_count) as f:
+            raw = json.load(f)
+        # Normalise keys to lowercase
+        on_hand = {k.lower().strip(): float(v) for k, v in raw.items() if v != "" and v is not None}
+        print(f"  📋 Using on-hand counts for {len(on_hand)} items from {args.from_count}")
+
     print("═══════════════════════════════════════════════════")
     print("  On Par — Weekly Food Order Generator")
     print("═══════════════════════════════════════════════════")
 
-    canonical_items, best_prices = load_data()
+    canonical_items, best_prices = load_data(on_hand)
 
     print("\n→ Running basket optimizer...")
     assignment, dropped, unassigned, notes = optimize_basket(canonical_items, best_prices)
@@ -768,6 +803,7 @@ def main():
         assignment, dropped, unassigned, notes,
         canonical_items, best_prices,
         savings_rows, total_saved,
+        from_count=(on_hand is not None),
     )
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

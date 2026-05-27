@@ -36,6 +36,22 @@
     .btn-primary:hover{opacity:.88;background:var(--accent)}
     .btn-danger{background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.3);color:var(--red)}
     .btn-danger:hover{background:rgba(248,81,73,.25)}
+    .btn-success{background:#238636;border-color:#2ea043;color:#fff;font-weight:700}
+    .btn-success:hover{background:#2ea043}
+    .btn-success:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+    /* ── Generate order spinner ── */
+    .spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);
+      border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    /* ── Toast ── */
+    .toast{
+      position:fixed;bottom:24px;right:24px;z-index:200;
+      background:#238636;color:#fff;padding:12px 20px;border-radius:8px;
+      font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.4);
+      display:none;align-items:center;gap:10px;
+    }
+    .toast.show{display:flex}
+    .toast.error{background:#b91c1c}
 
     /* ── Stats bar ── */
     .stats-bar{
@@ -202,6 +218,7 @@
     <button class="btn btn-danger" onclick="resetAll()">↺ Reset</button>
     <button class="btn" onclick="togglePanel()">📋 By Vendor</button>
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
+    <button class="btn btn-success" id="generateBtn" onclick="generateOrder()" disabled title="Fill in all on-hand counts to enable">🚀 Generate Order</button>
   </div>
 </header>
 
@@ -217,6 +234,7 @@
   <main class="content" id="content"></main>
 </div>
 
+<div id="toast" class="toast"></div>
 <div class="overlay" id="overlay" onclick="togglePanel()"></div>
 <div class="vendor-panel" id="vendorPanel">
   <div class="panel-header">
@@ -522,6 +540,16 @@ function updateStats(){
   document.getElementById('stockedCount').textContent=stocked;
   document.getElementById('uncountedCount').textContent=uncounted;
 
+  // Enable "Generate Order" only when everything has been counted
+  const genBtn = document.getElementById('generateBtn');
+  if(uncounted === 0){
+    genBtn.removeAttribute('disabled');
+    genBtn.title = 'All items counted — click to generate the weekly order';
+  } else {
+    genBtn.setAttribute('disabled','');
+    genBtn.title = `Fill in all on-hand counts first (${uncounted} remaining)`;
+  }
+
   document.getElementById('vendorPills').innerHTML=
     Object.entries(vendorCounts)
       .sort((a,b)=>b[1]-a[1])
@@ -586,6 +614,62 @@ function resetAll(){
     }
   }
   updateStats();
+}
+
+// ── Generate Order trigger ──────────────────────────────
+// POSTs on-hand counts to the local server (python3 server.py, port 3457)
+// which runs weekly_order.py and returns {ok:true}.
+// Then opens the generated weekly_order.html.
+const SERVER = 'http://localhost:3457';
+
+function showToast(msg, isError=false, duration=5000){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show'+(isError?' error':'');
+  setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+async function generateOrder(){
+  const btn = document.getElementById('generateBtn');
+
+  // Collect on-hand counts: {itemName: onHandValue}
+  const counts = {};
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      const oh = getOnHand(item.id);
+      if(oh !== '' && oh !== undefined && oh !== null){
+        counts[item.name] = parseFloat(oh);
+      }
+    }
+  }
+
+  // Show spinner
+  btn.innerHTML = '<span class="spin"></span> Generating…';
+  btn.setAttribute('disabled','');
+
+  try {
+    const resp = await fetch(`${SERVER}/generate-order`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(counts),
+    });
+    const data = await resp.json();
+    if(data.ok){
+      showToast('✅ Weekly order generated! Opening now…');
+      setTimeout(()=> window.open(`${SERVER}/weekly_order.html`, '_blank'), 600);
+    } else {
+      showToast('❌ Error: ' + (data.error || 'unknown'), true, 8000);
+    }
+  } catch(e) {
+    showToast(
+      '❌ Cannot reach local server. Run: python3 server.py',
+      true, 10000
+    );
+  }
+
+  // Restore button
+  btn.innerHTML = '🚀 Generate Order';
+  btn.removeAttribute('disabled');
 }
 
 // ── Init ────────────────────────────────────────────────
