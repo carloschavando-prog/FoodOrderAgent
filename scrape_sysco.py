@@ -576,7 +576,7 @@ def sb_upsert(path, payload, on_conflict):
 # ── Item master matching ──────────────────────────────────────────────────────
 
 def load_item_map():
-    rows  = sb_get("items?select=id,name")
+    rows  = sb_get("items?select=id,name&order=id.asc")
     by_name = {r["name"].lower().strip(): r["id"] for r in rows}
     # existing Sysco APNs (productIds) already matched in pricing table
     rows2 = sb_get(
@@ -586,14 +586,117 @@ def load_item_map():
     return {"by_name": by_name, "by_apn": by_apn}
 
 
+_BRAND_PREFIXES = re.compile(
+    r"^("
+    # Sysco branded items
+    r"sysco\s+(classic|imperial|supreme|natural|reliance|essentials?|premium)\s+"
+    r"|sysco\s+(imperial/mccormick|imperial/bacardi|imperial/tabasco|freshpoint)\s+"
+    r"|sysco\s+imperial\s+"
+    r"|sysco/freshpoint\s+(natural|classic|imperial)\s+"
+    # Other common Sysco order-guide brand prefixes
+    r"|imperial\s+fresh\s+"
+    r"|house\s+recipe\s+(classic|imperial|premium)\s+"
+    r"|block\s+&\s+barrel\s+(classic|imperial)\s+"
+    r"|arrezzio\s+(classic|imperial)\s+"
+    r"|casa\s+solana\s+(classic|imperial)\s+"
+    r"|reliance\s+fresh\s+"
+    r"|tyson\s+red\s+label\s+"
+    r"|tyson\s+(imperial|classic|premium|select|natural)\s+"
+    r"|fire\s+river\s+farms\s+reliance\s+"
+    r"|packer\s+"
+    r")",
+    re.IGNORECASE,
+)
+
+# Synonym map — both directions for common abbreviations / alternate names
+_SYNONYMS = {
+    "mayo":        "mayonnaise",
+    "mayonnaise":  "mayo",
+    "parm":        "parmesan",
+    "parmesan":    "parm",
+    "mara":        "maraschino",
+    "maraschino":  "mara",
+    "beef":        "burger",
+    "burger":      "beef",
+    "hamburger":   "burger",
+    "chdr":        "cheddar",
+    "cheddar":     "chdr",
+    "mozz":        "mozzarella",
+    "mozzarella":  "mozz",
+    "foam":        "styrofoam",
+    "styrofoam":   "foam",
+    "amer":        "american",
+    "american":    "amer",
+    "bnls":        "boneless",
+    "boneless":    "bnls",
+    "film":        "wrap",
+    "wrap":        "paper",    # one-way: wrap products match "paper" items, not vice versa
+    "tshrt":       "shirt",
+    "shirt":       "tshrt",
+    "layflat":     "slice",
+    "sliced":      "layflat",
+}
+
+
+def _strip_vendor_prefix(name):
+    """Remove brand prefixes that add noise to matching."""
+    prev = None
+    result = name
+    # Apply repeatedly until stable (handles double-prefixes like "SYSCO CLASSIC ARREZZIO")
+    while result != prev:
+        prev = result
+        result = _BRAND_PREFIXES.sub("", result).strip()
+    return result
+
+
+def _stem(word):
+    """Minimal plural normalization: fries→fry, tomatoes→tomato, wings→wing."""
+    w = word.lower()
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"   # fries→fry, cherries→cherry
+    if len(w) > 4 and w.endswith("oes"):
+        return w[:-2]          # tomatoes→tomato, potatoes→potato
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]          # wings→wing, kegs→keg, packets→packet
+    return w
+
+
+def _preprocess(text):
+    """Combine number+unit tokens so sizes aren't stripped: '2 oz' → '2oz', '120 ct' → '120ct'."""
+    text = re.sub(r"(\d+)\s*(oz|ct|lb)\b", r"\1\2", text.lower(), flags=re.IGNORECASE)
+    return text
+
+
+def _tokenize(text):
+    """Split text into stemmed, synonym-expanded tokens, stripping noise."""
+    stop = {"", "the", "a", "an", "and", "of", "in", "to", "go", "ss",
+            "w", "oz", "s", "bev", "c", "pf",
+            "fresh", "pla", "rl", "bk", "wt", "pp", "mw", "hw",
+            "fc", "gf", "iqf", "pld", "brd", "cvp", "jb", "jt",
+            "grde", "grade", "usda", "sel", "select", "choice", "premium",
+            "classic", "imperial", "natural", "reliance", "supreme"}
+    tokens = set()
+    for raw in re.split(r"\W+", _preprocess(text)):
+        if re.fullmatch(r"\d+", raw):  # pure digits (no units attached)
+            continue
+        t = _stem(raw)
+        if t in stop or len(t) <= 1:
+            continue
+        tokens.add(t)
+        # expand synonym
+        if t in _SYNONYMS:
+            tokens.add(_stem(_SYNONYMS[t]))
+    return tokens
+
+
 def _word_overlap(a, b):
-    stop = {"", "the", "a", "an", "and", "of", "in", "ss", "w", "oz"}
-    wa = set(re.split(r"\W+", a.lower())) - stop
-    wb = set(re.split(r"\W+", b.lower())) - stop
+    wa = _tokenize(a)
+    wb = _tokenize(b)
     if not wa or not wb:
         return 0.0
     shorter = wa if len(wa) <= len(wb) else wb
-    return len(shorter & (wa | wb)) / len(shorter)
+    longer  = wb if len(wa) <= len(wb) else wa
+    return len(shorter & longer) / len(shorter)
 
 
 def match_item(name, apn, item_map):
@@ -601,21 +704,24 @@ def match_item(name, apn, item_map):
     # 1. Exact APN match (previous run stored productId in apn column)
     if apn and apn.upper() in item_map["by_apn"]:
         return item_map["by_apn"][apn.upper()]
-    # 2. Exact name match
+    # 2. Exact name match (raw, then prefix-stripped)
     n = (name or "").lower().strip()
     if n in item_map["by_name"]:
         return item_map["by_name"][n]
-    # 3. Substring match
+    n_stripped = _strip_vendor_prefix(n)
+    if n_stripped in item_map["by_name"]:
+        return item_map["by_name"][n_stripped]
+    # 3. Substring match (use stripped name to avoid brand false hits)
     for k, v in item_map["by_name"].items():
-        if k in n or n in k:
+        if k in n_stripped or n_stripped in k:
             return v
-    # 4. Word-overlap (threshold 0.7)
+    # 4. Word-overlap with synonym expansion (threshold 0.65)
     best_score, best_id = 0.0, None
     for k, v in item_map["by_name"].items():
-        score = _word_overlap(n, k)
+        score = _word_overlap(n_stripped, k)
         if score > best_score:
             best_score, best_id = score, v
-    return best_id if best_score >= 0.7 else None
+    return best_id if best_score >= 0.65 else None
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

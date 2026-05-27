@@ -78,13 +78,25 @@ def load_item_map():
     return {"by_name": by_name, "by_apn": by_apn}
 
 import re
+def _stem(word):
+    w = word.lower()
+    if len(w) > 4 and w.endswith('ies'):
+        return w[:-3] + 'y'
+    if len(w) > 4 and w.endswith('oes'):
+        return w[:-2]
+    if len(w) > 3 and w.endswith('s') and not w.endswith('ss'):
+        return w[:-1]
+    return w
+
 def _word_overlap(a, b):
-    wa = set(re.split(r'\W+', a.lower())) - {'', 'the', 'a', 'an', 'and', 'of', 'in', 'ss'}
-    wb = set(re.split(r'\W+', b.lower())) - {'', 'the', 'a', 'an', 'and', 'of', 'in', 'ss'}
+    stop = {'', 'the', 'a', 'an', 'and', 'of', 'in', 'ss', 's'}
+    wa = {_stem(t) for t in re.split(r'\W+', a.lower()) if not re.fullmatch(r'[\d]+', t)} - stop
+    wb = {_stem(t) for t in re.split(r'\W+', b.lower()) if not re.fullmatch(r'[\d]+', t)} - stop
     if not wa or not wb:
         return 0.0
     shorter = wa if len(wa) <= len(wb) else wb
-    return len(shorter & (wa | wb)) / len(shorter)
+    longer  = wb if len(wa) <= len(wb) else wa
+    return len(shorter & longer) / len(shorter)
 
 def match_item(name, apn, item_map):
     if apn and str(apn) in item_map["by_apn"]:
