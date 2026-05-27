@@ -617,10 +617,8 @@ function resetAll(){
 }
 
 // ── Generate Order trigger ──────────────────────────────
-// POSTs on-hand counts to the local server (python3 server.py, port 3457)
-// which runs weekly_order.py and returns {ok:true}.
-// Then opens the generated weekly_order.html.
-const SERVER = 'http://localhost:3457';
+// POSTs on-hand counts to /api/generate_order (Vercel serverless).
+// The API returns the complete order HTML which is opened in a new tab.
 
 function showToast(msg, isError=false, duration=5000){
   const t=document.getElementById('toast');
@@ -648,23 +646,25 @@ async function generateOrder(){
   btn.setAttribute('disabled','');
 
   try {
-    const resp = await fetch(`${SERVER}/generate-order`, {
+    const resp = await fetch('/api/generate_order', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(counts),
     });
-    const data = await resp.json();
-    if(data.ok){
-      showToast('✅ Weekly order generated! Opening now…');
-      setTimeout(()=> window.open(`${SERVER}/weekly_order.html`, '_blank'), 600);
+
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({error:'Unknown server error'}));
+      showToast('❌ Error: ' + (err.error || resp.statusText), true, 8000);
     } else {
-      showToast('❌ Error: ' + (data.error || 'unknown'), true, 8000);
+      // API returns full HTML — open it in a new tab via Blob URL
+      const html = await resp.text();
+      const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+      const url  = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      showToast('✅ Weekly order generated!');
     }
   } catch(e) {
-    showToast(
-      '❌ Cannot reach local server. Run: python3 server.py',
-      true, 10000
-    );
+    showToast('❌ Request failed: ' + e.message, true, 8000);
   }
 
   // Restore button
