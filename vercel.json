@@ -2,6 +2,9 @@
   "functions": {
     "api/generate_order.py": {
       "maxDuration": 30
+    },
+    "api/item_master.py": {
+      "maxDuration": 30
     }
   }
 }
