@@ -277,6 +277,27 @@ td.save-pos{color:#198754;font-weight:600}
 td.save-zero{color:var(--muted)}
 .pill{display:inline-block;padding:1px 6px;border-radius:10px;font-size:.7rem;font-weight:600;margin:1px}
 @media print{body{background:#fff}.vendor-card,.manual-card,.savings-card{box-shadow:none;border:1px solid #ddd}.content{padding:8px;gap:12px}}
+.order-btn{background:#198754;color:#fff;border:none;padding:9px 22px;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;letter-spacing:.02em;white-space:nowrap}
+.order-btn:hover{background:#146c43}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center}
+.modal-box{background:#fff;border-radius:12px;padding:28px;max-width:540px;width:92%;box-shadow:0 12px 48px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto}
+.modal-title{font-size:1.15rem;font-weight:700;margin-bottom:14px;color:#1a1a2e}
+.vendor-summary{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.vs-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:7px}
+.vs-name{font-weight:700;font-size:.9rem}
+.vs-detail{font-size:.8rem;color:#555}
+.order-warning{background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 14px;font-size:.82rem;color:#664d03;margin:12px 0}
+.modal-actions{display:flex;gap:12px;margin-top:16px;justify-content:flex-end}
+.btn-cancel{background:#e9ecef;color:#333;border:none;padding:9px 20px;border-radius:7px;cursor:pointer;font-weight:600;font-size:.88rem}
+.btn-cancel:hover{background:#ced4da}
+.btn-submit{background:#198754;color:#fff;border:none;padding:9px 22px;border-radius:7px;cursor:pointer;font-weight:700;font-size:.88rem}
+.btn-submit:hover{background:#146c43}
+.btn-submit:disabled{background:#6c757d;cursor:not-allowed}
+.status-row{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:7px;margin-bottom:8px;background:#f8f9fa;font-size:.88rem;line-height:1.5}
+.status-ok{background:#d4edda!important;color:#155724}
+.status-err{background:#f8d7da!important;color:#721c24}
+.spin{animation:_spin 1s linear infinite;display:inline-block}
+@keyframes _spin{to{transform:rotate(360deg)}}
 """
 
 def fmt_money(v): return f"${v:,.2f}"
@@ -289,6 +310,30 @@ def build_html(assignment, dropped, unassigned, notes,
                canonical_items, best_prices, savings_rows, total_saved):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
     vendor_items, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices)
+
+    # ── Build per-vendor order payload for "Place Orders" button ─────────────
+    _order_data = {}
+    for _vid in BROADLINER_IDS:
+        _entries = vendor_items.get(_vid, [])
+        _vi = []
+        for _e in _entries:
+            _apn = (_e.get("apn") or "").strip()
+            if not _apn:
+                continue
+            _qty = _e["cases"]
+            if _vid == 1:    # US Foods — productNumber (numeric)
+                try:    _vi.append({"productNumber": int(_apn), "qty": _qty})
+                except: _vi.append({"productNumber": _apn,     "qty": _qty})
+            elif _vid == 2:  # PFG — apn (numeric product number; resolved to UUID server-side)
+                _vi.append({"apn": _apn, "qty": _qty, "uomType": "CS"})
+            elif _vid == 3:  # Sysco — productId
+                _vi.append({"productId": _apn, "qty": _qty})
+            elif _vid == 4:  # GFS — materialNumber
+                _vi.append({"materialNumber": _apn, "qty": _qty})
+        if _vi:
+            _order_data[str(_vid)] = _vi
+    _order_data_json = json.dumps(_order_data, separators=(",", ":"))
+    _vnames_json     = json.dumps({str(k): v for k, v in VENDOR_NAMES.items()})
 
     now        = datetime.datetime.now()
     date_str   = now.strftime("%A, %B %d, %Y")
@@ -315,9 +360,12 @@ def build_html(assignment, dropped, unassigned, notes,
   <div><h1>📋 Weekly Food Order</h1>
     <div class="meta">On Par Bar &amp; Grill &nbsp;·&nbsp; {date_str} &nbsp;·&nbsp; {time_str} &nbsp;·&nbsp; From Inventory Count</div>
   </div>
-  <div style="text-align:right;font-size:.85rem;opacity:.8">
-    {len(assignment)} items &nbsp;|&nbsp; {total_cases} cases &nbsp;|&nbsp;
-    <strong style="font-size:1.1rem;opacity:1">{fmt_money(grand)}</strong>
+  <div style="display:flex;align-items:center;gap:18px">
+    <div style="text-align:right;font-size:.85rem;opacity:.8">
+      {len(assignment)} items &nbsp;|&nbsp; {total_cases} cases &nbsp;|&nbsp;
+      <strong style="font-size:1.1rem;opacity:1">{fmt_money(grand)}</strong>
+    </div>
+    <button class="order-btn" onclick="openOrderModal()">📦 Place Orders</button>
   </div>
 </div>
 <div class="summary-bar">"""]
@@ -447,6 +495,118 @@ def build_html(assignment, dropped, unassigned, notes,
                  f'<td class="r" style="color:#dc3545">{fmt_money(total_max)}</td>'
                  f'<td class="save-pos r">{fmt_money(total_saved)}</td></tr>')
         h.append('</tbody></table></div>')
+
+    # ── Confirmation modal + Place Orders JavaScript ──────────────────────────
+    _modal_rows = []
+    for _vid in BROADLINER_IDS:
+        _vd = _order_data.get(str(_vid))
+        if not _vd:
+            continue
+        _dark, _light = VENDOR_COLOR[_vid]
+        _n     = len(_vd)
+        _spend = fmt_money(vendor_spend.get(_vid, 0.0))
+        _cases = vendor_cases.get(_vid, 0)
+        _modal_rows.append(
+            f'<div class="vs-row" style="background:{_light}">'
+            f'<span class="vs-name" style="color:{_dark}">{VENDOR_NAMES[_vid]}</span>'
+            f'<span class="vs-detail">{_n} items &nbsp;·&nbsp; {_cases} cases &nbsp;·&nbsp; {_spend}</span>'
+            f'</div>'
+        )
+    _modal_vendor_html = "\n".join(_modal_rows) if _modal_rows else \
+        '<p style="color:#6c757d">No vendor items with APNs — cannot auto-place orders.</p>'
+
+    _js = (
+        "const ORDER_DATA=" + _order_data_json + ";\n"
+        "const VENDOR_NAMES_MAP=" + _vnames_json + ";\n"
+        """const ORDER_ENDPOINTS={
+  "1":"/api/place_order_usfoods",
+  "2":"/api/place_order_pfg",
+  "3":"/api/place_order_sysco",
+  "4":"/api/place_order_gfs"
+};
+function openOrderModal(){
+  document.getElementById('order-modal').style.display='flex';
+}
+function closeOrderModal(){
+  document.getElementById('order-modal').style.display='none';
+  document.getElementById('confirm-section').style.display='block';
+  document.getElementById('progress-section').style.display='none';
+  document.getElementById('done-actions').style.display='none';
+  var sb=document.getElementById('submit-btn');
+  if(sb) sb.disabled=false;
+}
+async function submitOrders(){
+  var btn=document.getElementById('submit-btn');
+  if(btn) btn.disabled=true;
+  document.getElementById('confirm-section').style.display='none';
+  document.getElementById('progress-section').style.display='block';
+  var vendors=Object.keys(ORDER_DATA);
+  var container=document.getElementById('status-rows');
+  container.innerHTML='';
+  vendors.forEach(function(vid){
+    var row=document.createElement('div');
+    row.id='vs-'+vid;
+    row.className='status-row';
+    row.innerHTML='<span class="spin">⏳</span>&nbsp;<strong>'+VENDOR_NAMES_MAP[vid]+'</strong>: Placing order…';
+    container.appendChild(row);
+  });
+  var promises=vendors.map(async function(vid){
+    var items=ORDER_DATA[vid];
+    var row=document.getElementById('vs-'+vid);
+    try{
+      var resp=await fetch(ORDER_ENDPOINTS[vid],{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({items:items})
+      });
+      var data=await resp.json();
+      if(data.success){
+        var id=data.orderId||data.confirmationNumber||data.orderHeaderId||data.tandemOrderNumber||'';
+        var deliv=data.deliveryDate?' · Delivery: '+data.deliveryDate:'';
+        row.className='status-row status-ok';
+        row.innerHTML='✅ <strong>'+VENDOR_NAMES_MAP[vid]+'</strong>: Order placed!'
+          +(id?' (ID '+id+')':'')+deliv;
+      }else{
+        row.className='status-row status-err';
+        row.innerHTML='❌ <strong>'+VENDOR_NAMES_MAP[vid]+'</strong>: '+(data.error||'Unknown error');
+      }
+    }catch(e){
+      row.className='status-row status-err';
+      row.innerHTML='❌ <strong>'+VENDOR_NAMES_MAP[vid]+'</strong>: Network error — '+e.message;
+    }
+  });
+  await Promise.all(promises);
+  document.getElementById('done-actions').style.display='flex';
+}"""
+    )
+
+    h.append(
+        '<div id="order-modal" class="modal-overlay">'
+        '<div class="modal-box">'
+        '<div class="modal-title">🛒 Confirm &amp; Place All Orders</div>'
+        '<div id="confirm-section">'
+        '<p style="color:#555;font-size:.88rem;margin-bottom:8px">'
+        'Purchase orders will be submitted to the following vendors:</p>'
+        '<div class="vendor-summary">' + _modal_vendor_html + '</div>'
+        '<div class="order-warning">'
+        '⚠️ Orders are <strong>final</strong> once submitted. '
+        'Verify quantities in the table above before confirming.'
+        '</div>'
+        '<div class="modal-actions">'
+        '<button class="btn-cancel" onclick="closeOrderModal()">Cancel</button>'
+        '<button id="submit-btn" class="btn-submit" onclick="submitOrders()">'
+        'Confirm &amp; Place All Orders</button>'
+        '</div></div>'
+        '<div id="progress-section" style="display:none">'
+        '<p style="color:#555;font-size:.88rem;margin-bottom:12px">'
+        'Submitting orders in parallel&hellip;</p>'
+        '<div id="status-rows"></div>'
+        '<div class="modal-actions" id="done-actions" style="display:none">'
+        '<button class="btn-submit" onclick="closeOrderModal()">Done</button>'
+        '</div></div>'
+        '</div></div>'
+        '<script>' + _js + '</script>'
+    )
 
     h.append("</div></body></html>")
     return "".join(h)

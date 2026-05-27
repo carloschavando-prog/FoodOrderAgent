@@ -1,10 +1,10 @@
 {
   "functions": {
-    "api/generate_order.py": {
-      "maxDuration": 30
-    },
-    "api/item_master.py": {
-      "maxDuration": 30
-    }
+    "api/generate_order.py":      {"maxDuration": 30},
+    "api/item_master.py":         {"maxDuration": 30},
+    "api/place_order_usfoods.py": {"maxDuration": 60},
+    "api/place_order_pfg.py":     {"maxDuration": 60},
+    "api/place_order_sysco.py":   {"maxDuration": 60},
+    "api/place_order_gfs.py":     {"maxDuration": 60}
   }
 }
