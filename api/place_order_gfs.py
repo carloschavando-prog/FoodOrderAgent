@@ -7,7 +7,7 @@ Body JSON:
   {"items": [{"materialNumber": "000000001001234567", "qty": 3}, ...]}
 
 Returns JSON:
-  {"success": true, "orderId": "...", "deliveryDate": "2026-06-03",
+  {"success": true, "orderId": "...", "deliveryDate": "2026-05-29",
    "totalItems": N, "error": null}
 
 Auth:
@@ -16,18 +16,23 @@ Auth:
 
   ⚠️  GFS uses Okta SAML2 SSO with NO programmatic refresh token.
   Sessions expire after ~30 days. When expired, an admin must:
-    1. Run python3 intercept_gfs.py  locally (opens Chrome, logs in)
+    1. Run python3 intercept_gfs2.py  locally (opens Chrome, logs in)
     2. Run python3 setup_vendor_auth.py  to upload fresh cookies to Supabase
 
-Order flow:
-  1. Load session cookies
-  2. GET v6/lists/order-guide  → validate session + get available items
-  3. Probe cart endpoint (v6/cart or v1/orders)
-  4. POST items to cart / order
-  5. Submit order
+Order flow (confirmed via network capture 2026-05-27):
+  1. Load session cookies from Supabase / env var
+  2. POST v8/cart             → get current active cart ID
+  3. GET  v3/delivery-schedules → find next available delivery date
+  4. PUT  v7/cart/{cartId}    → add items + set fulfillmentType=TRUCK + routeDate
+  5. POST v6/cart/{cartId}/submit  → submit order, returns {cartOrderIds: [...]}
+
+Required headers on every mutating call:
+  Content-Type: application/json
+  X-Requested-With: XMLHttpRequest
+  X-XSRF-TOKEN: {value of XSRF-TOKEN cookie}
 """
 
-import json, os, urllib.request, urllib.error
+import json, os, datetime, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -39,6 +44,10 @@ SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", SB_KEY)
 API_BASE = "https://order.gfs.com/us-central1/api"
 _UA      = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
+# Minimum hours before cutoff to still accept the delivery date
+MIN_HOURS_BEFORE_CUTOFF = 2
+
 
 # ── Credential loading ────────────────────────────────────────────────────────
 
@@ -84,7 +93,7 @@ def load_gfs_cookies():
         }
 
     raise RuntimeError(
-        "No GFS_COOKIES found. Run intercept_gfs.py then setup_vendor_auth.py."
+        "No GFS_COOKIES found. Run intercept_gfs2.py then setup_vendor_auth.py."
     )
 
 
@@ -95,127 +104,183 @@ def _cookie_header(cookies):
 
 
 def _gfs_headers(cookies, extra=None):
+    """Base headers for all GFS API requests."""
     h = {
-        "Cookie":       _cookie_header(cookies),
-        "X-XSRF-TOKEN": cookies.get("XSRF-TOKEN", ""),
-        "Accept":       "application/json, text/plain, */*",
-        "Origin":       "https://order.gfs.com",
-        "Referer":      "https://order.gfs.com/",
-        "User-Agent":   _UA,
+        "Cookie":              _cookie_header(cookies),
+        "X-XSRF-TOKEN":        cookies.get("XSRF-TOKEN", ""),
+        "X-Requested-With":    "XMLHttpRequest",   # required — without this GFS returns 218
+        "Accept":              "application/json, text/plain, */*",
+        "Content-Type":        "application/json",
+        "Origin":              "https://order.gfs.com",
+        "Referer":             "https://order.gfs.com/cart",
+        "User-Agent":          _UA,
+        "sec-fetch-site":      "same-origin",
+        "sec-fetch-mode":      "cors",
     }
     if extra:
         h.update(extra)
     return h
 
 
-def gfs_get(path, cookies):
-    url = f"{API_BASE}/{path}"
-    req = urllib.request.Request(url, headers=_gfs_headers(cookies))
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            raise RuntimeError(
-                "GFS session expired (HTTP {}). "
-                "Re-login: python3 intercept_gfs.py → python3 setup_vendor_auth.py".format(e.code)
-            )
-        raise RuntimeError(f"GFS GET {path} → {e.code}: {e.read().decode()[:200]}")
-
-
-def gfs_post(path, body, cookies):
+def _gfs_request(method, path, body, cookies):
+    """Execute a GFS API request, return parsed JSON."""
     url  = f"{API_BASE}/{path}"
-    data = json.dumps(body).encode()
+    data = json.dumps(body).encode() if body is not None else None
     req  = urllib.request.Request(
         url, data=data,
-        headers=_gfs_headers(cookies, {"Content-Type": "application/json"}),
-        method="POST"
+        headers=_gfs_headers(cookies),
+        method=method
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read())
+            raw = r.read()
+            if not raw:
+                return {}
+            result = json.loads(raw)
+            # GFS returns HTTP 200 but with {"error": {"code": "default.error"}} for bad calls
+            if isinstance(result, dict) and "error" in result:
+                raise RuntimeError(
+                    f"GFS {method} {path} → API error: {result['error']}"
+                )
+            return result
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise RuntimeError(
-                "GFS session expired (HTTP {}). "
-                "Re-login: python3 intercept_gfs.py → python3 setup_vendor_auth.py".format(e.code)
+                f"GFS session expired (HTTP {e.code}). "
+                "Re-login: python3 intercept_gfs2.py → python3 setup_vendor_auth.py"
             )
         body_txt = e.read().decode()[:300]
-        raise RuntimeError(f"GFS POST {path} → {e.code}: {body_txt}")
+        raise RuntimeError(f"GFS {method} {path} → HTTP {e.code}: {body_txt}")
 
 
-# ── Order placement ───────────────────────────────────────────────────────────
+def gfs_get(path, cookies):
+    return _gfs_request("GET", path, None, cookies)
+
+def gfs_post(path, body, cookies):
+    return _gfs_request("POST", path, body, cookies)
+
+def gfs_put(path, body, cookies):
+    return _gfs_request("PUT", path, body, cookies)
+
+
+# ── Order placement helpers ───────────────────────────────────────────────────
 
 def validate_session(cookies):
     """Validate GFS session is still active. Returns True or raises."""
-    # HEAD the session endpoint
-    url = f"https://order.gfs.com/us-central1/api/v4/session"
+    url = f"{API_BASE}/v4/session"
     req = urllib.request.Request(url, headers=_gfs_headers(cookies), method="HEAD")
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=10):
             return True
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
-            raise RuntimeError("GFS session expired — re-run intercept_gfs.py")
-        return True   # other errors may still work
+            raise RuntimeError("GFS session expired — re-run intercept_gfs2.py")
+        return True
     except Exception:
         return True
 
 
+def get_next_route_date(cookies):
+    """
+    Fetch delivery schedules and return the soonest route date whose cutoff
+    hasn't passed (with MIN_HOURS_BEFORE_CUTOFF buffer).
+
+    Returns ISO date string: "2026-05-29"
+    """
+    schedules = gfs_get("v3/delivery-schedules", cookies)
+    entries   = schedules.get("deliverySchedules", [])
+    if not entries:
+        raise RuntimeError("GFS delivery-schedules returned empty list")
+
+    now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+    buffer = datetime.timedelta(hours=MIN_HOURS_BEFORE_CUTOFF)
+
+    for entry in entries:
+        cutoff_str = entry.get("cutoffDateTime", "")
+        if not cutoff_str:
+            return entry["routeDate"]
+        # Parse "2026-05-28T21:00:00+0000"
+        cutoff_str_normalized = cutoff_str.replace("+0000", "+00:00")
+        try:
+            cutoff = datetime.datetime.fromisoformat(cutoff_str_normalized)
+        except ValueError:
+            # fallback: skip timezone parsing
+            cutoff = datetime.datetime.strptime(cutoff_str[:19], "%Y-%m-%dT%H:%M:%S").replace(
+                tzinfo=datetime.timezone.utc
+            )
+        if now + buffer < cutoff:
+            return entry["routeDate"]
+
+    raise RuntimeError(
+        "No GFS delivery date available — all upcoming cutoffs have passed."
+    )
+
+
 def place_gfs_order(cookies, items):
     """
-    Place a GFS order.
-    items: [{"materialNumber": "...", "qty": N}, ...]
+    Place a GFS truck delivery order.
 
-    GFS API endpoint for ordering is probed at runtime.
-    Known read endpoints (scraper): v6/lists/order-guide, v1/materials/info, v5/prices
-    Ordering endpoints (probed):    v1/cart, v6/cart, v1/orders, v6/orders
+    items: [{"materialNumber": "282537", "qty": 2}, ...]
+
+    Returns: {"orderId": "...", "deliveryDate": "2026-05-29",
+              "cartOrderIds": [...], "cartId": "..."}
     """
     validate_session(cookies)
 
-    # ── Probe: find the cart / order submission endpoint ──────────────────────
-    # Build the order items in GFS format (material number + quantity)
-    gfs_items = [
-        {"materialNumber": item["materialNumber"], "quantity": item["qty"]}
+    # ── Step 1: Get current active cart ──────────────────────────────────────
+    cart    = gfs_post("v8/cart", {}, cookies)
+    cart_id = cart.get("id")
+    if not cart_id:
+        raise RuntimeError(f"Could not retrieve GFS cart ID. Response: {cart}")
+
+    # ── Step 2: Get next available delivery date ──────────────────────────────
+    route_date = get_next_route_date(cookies)
+
+    # ── Step 3: PUT v7/cart/{id} — add items + set delivery method/date ───────
+    ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.") + "000Z"
+
+    materials = [
+        {
+            "materialNumber":   str(item["materialNumber"]),
+            "lines":            [{"uom": "CS", "quantity": int(item["qty"])}],
+            "restored":         False,
+            "originTrackingId": None,
+        }
         for item in items
+        if int(item.get("qty", 0)) > 0
     ]
 
-    # Try multiple endpoint patterns, return on first success
-    cart_endpoints = [
-        # (method, path, body_builder)
-        ("POST", "v6/cart/items",
-         lambda: {"items": gfs_items}),
-        ("POST", "v1/cart",
-         lambda: {"items": gfs_items}),
-        ("POST", "v6/orders",
-         lambda: {"items": gfs_items, "submit": True}),
-        ("POST", "v1/orders",
-         lambda: {"orderItems": [{"materialNumber": i["materialNumber"],
-                                   "quantity": i["qty"]} for i in items]}),
-    ]
+    if not materials:
+        raise ValueError("All item quantities are 0 — nothing to order")
 
-    order_id = None
-    for method, path, body_fn in cart_endpoints:
-        try:
-            resp = gfs_post(path, body_fn(), cookies)
-            # If we get here without error, use this endpoint
-            order_id = (resp.get("orderId") or resp.get("id") or
-                        resp.get("orderNumber") or "submitted")
-            break
-        except RuntimeError as ex:
-            if "session expired" in str(ex).lower():
-                raise
-            continue  # try next endpoint
+    put_body = {
+        "userLastUpdatedTimestamp": ts,
+        "fulfillmentType":          "TRUCK",
+        "truckFulfillment": {
+            "routeDate":            route_date,
+            "customerArrivalDate":  route_date,
+        },
+        "materials": materials,
+    }
 
-    if order_id is None:
-        raise RuntimeError(
-            "Could not place GFS order — order endpoint not yet mapped. "
-            "This requires a live session capture from the GFS portal. "
-            "Open order.gfs.com and place a manual order while running intercept_gfs2.py "
-            "to capture the exact submit endpoint."
-        )
+    gfs_put(f"v7/cart/{cart_id}", put_body, cookies)
 
-    return {"orderId": str(order_id), "deliveryDate": ""}
+    # ── Step 4: Submit order ───────────────────────────────────────────────────
+    submit_resp = gfs_post(
+        f"v6/cart/{cart_id}/submit",
+        {"splitOrders": []},
+        cookies
+    )
+
+    cart_order_ids = submit_resp.get("cartOrderIds", [])
+    order_id       = cart_order_ids[0] if cart_order_ids else "submitted"
+
+    return {
+        "orderId":      str(order_id),
+        "deliveryDate": route_date,
+        "cartOrderIds": cart_order_ids,
+        "cartId":       cart_id,
+    }
 
 
 # ── Vercel handler ────────────────────────────────────────────────────────────
@@ -243,6 +308,7 @@ class handler(BaseHTTPRequestHandler):
                 "orderId":      result["orderId"],
                 "deliveryDate": result["deliveryDate"],
                 "totalItems":   len(items),
+                "cartOrderIds": result.get("cartOrderIds", []),
                 "error":        None,
             }).encode()
 
