@@ -37,7 +37,7 @@ import json, os, re, sys, urllib.request, urllib.error, urllib.parse
 API_BASE   = "https://order.gfs.com/us-central1/api"
 SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY     = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
-SEASON     = os.getenv("PRICE_SEASON", "Fall 2025")
+SEASON     = os.getenv("PRICE_SEASON", "Spring 2026")
 VENDOR_ID  = 4   # GFS
 BATCH      = 50
 

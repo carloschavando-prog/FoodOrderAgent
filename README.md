@@ -13,8 +13,9 @@ Pulls current prices from vendor portals → Supabase → basket optimizer.
 GitHub Actions (Mon/Thu)
   ├── scrape_usfoods.py  → US Foods panamax REST API
   ├── scrape_pfg.py      → PFG CustomerFirst Azure API
-  ├── scrape_sysco.py    → Sysco (TODO)
-  └── scrape_gfs.py      → GFS (TODO)
+  ├── scrape_gfs.py      → GFS Okta SAML2 cookies
+  ├── scrape_sysco.py    → Sysco Okta SAML2 + GraphQL
+  └── basket_report.py   → Markdown summary → $GITHUB_STEP_SUMMARY
           ↓
      Supabase (pricing table)
           ↓
@@ -22,74 +23,84 @@ GitHub Actions (Mon/Thu)
 ```
 
 Each scraper:
-1. Refreshes its Bearer/MSAL token (rotating refresh token chain)
+1. Authenticates (OAuth2 / MSAL / Okta SAML2)
 2. Fetches vendor's current price list
 3. Fuzzy-matches products to item master in Supabase
 4. Upserts prices
-5. Rotates its GitHub secret (`*_REFRESH_TOKEN`) for the next run
+5. (US Foods / PFG) Rotates its GitHub secret for the next run
 
 ---
 
 ## Vendors
 
-| # | Vendor | Status | Supabase vendor_id | Auth method |
-|---|--------|--------|--------------------|-------------|
+| # | Vendor | Status | vendor_id | Auth method |
+|---|--------|--------|-----------|-------------|
 | 1 | US Foods | ✅ Live | 1 | Azure B2C OAuth2 (JSON body) |
 | 2 | PFG CustomerFirst | ✅ Live | 2 | MSAL B2C (form-encoded, `client_info=1`) |
-| 3 | Sysco | 🔲 TODO | 3 | TBD |
-| 4 | GFS | ✅ Live | 4 | Okta SAML2 session cookies (GFS_COOKIES secret) |
+| 3 | Sysco | ✅ Live | 3 | Okta SAML2 step-up + GraphQL (programmatic) |
+| 4 | GFS Gordon Food Service | ✅ Live | 4 | Okta SAML2 session cookies (`GFS_COOKIES` secret) |
 
 ---
 
-## GitHub Secrets Required
+## GitHub Secrets & Variables Required
 
-| Secret | Description |
-|--------|-------------|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_KEY` | Supabase publishable key |
-| `GH_PAT` | GitHub PAT with repo secrets write permission |
-| `USF_REFRESH_TOKEN` | US Foods refresh token (auto-rotated each run) |
-| `USF_CONFIG` | US Foods static config JSON |
-| `PFG_REFRESH_TOKEN` | PFG MSAL refresh token (auto-rotated each run) |
-| `PFG_CONFIG` | PFG static config JSON |
-| `GFS_COOKIES` | GFS Okta SAML session cookies JSON (refresh by running intercept_gfs.py) |
+| Key | Type | Description |
+|-----|------|-------------|
+| `SUPABASE_URL` | Secret | Supabase project URL |
+| `SUPABASE_KEY` | Secret | Supabase publishable key |
+| `GH_PAT` | Secret | GitHub PAT with repo secrets write permission |
+| `USF_REFRESH_TOKEN` | Secret | US Foods refresh token (auto-rotated each run) |
+| `USF_CONFIG` | Secret | US Foods static config JSON |
+| `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
+| `PFG_CONFIG` | Secret | PFG static config JSON |
+| `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs.py`) |
+| `SYSCO_EMAIL` | Secret | Sysco login email (`carlos@onparbar.com`) |
+| `SYSCO_PASSWORD` | Secret | Sysco login password |
+| `PRICE_SEASON` | Variable | Season label for price_lists table (e.g. `Spring 2026`) |
 
 ---
 
 ## Local Development
 
-### One-time setup (capture tokens via browser):
+### Run scrapers locally:
 ```bash
-# US Foods
-python3 intercept_api.py          # opens Chrome once to capture tokens
+# US Foods / PFG — reads tokens from ~/.FoodOrderAgent/
+python3 scrape_usfoods.py
+python3 scrape_pfg.py
 
-# PFG CustomerFirst
-python3 intercept_pfg7.py         # opens Chrome once to capture tokens
+# GFS — reads cookies from ~/.FoodOrderAgent/gfs_session.json
+python3 scrape_gfs.py
 
-# GFS Gordon Food Service (session cookies expire — re-run periodically)
-python3 intercept_gfs.py          # opens Chrome, logs in via Okta SAML
-python3 -c "
+# Sysco — reads from env vars (no session file needed)
+SYSCO_PASSWORD='...' python3 scrape_sysco.py
+
+# Basket report
+python3 basket_report.py
+```
+
+### Refresh GFS cookies (when `GFS_COOKIES` secret expires):
+```bash
+python3 intercept_gfs.py   # opens Chrome, logs in via Okta SAML
+python3 - <<'EOF'
 import json, os
 s = json.load(open(os.path.expanduser('~/.FoodOrderAgent/gfs_session.json')))
 cks = {c['name']: c['value'] for c in s['cookies']}
 print(json.dumps({'gor': cks.get('GOR','us-central1'), 'gclb': cks.get('GCLB',''),
     'xsrf': cks.get('XSRF-TOKEN',''), 'session': cks.get('__Secure-GORDONORDERING2','')}))
-" | gh secret set GFS_COOKIES -R carloschavando-prog/FoodOrderAgent
+EOF
+| gh secret set GFS_COOKIES -R carloschavando-prog/FoodOrderAgent
 ```
-Sessions saved to `~/.FoodOrderAgent/`
 
-### Run scrapers locally:
+### Update season (when a new menu season starts):
 ```bash
-python3 scrape_usfoods.py
-python3 scrape_pfg.py
-python3 scrape_gfs.py
+gh variable set PRICE_SEASON --body "Fall 2026" -R carloschavando-prog/FoodOrderAgent
 ```
 
 ### Directory structure:
 ```
 ~/.FoodOrderAgent/
-  pfg_session.json          # Playwright browser state (PFG)
   gfs_session.json          # Playwright browser state (GFS Okta SAML)
+  pfg_session.json          # Playwright browser state (PFG)
   pfg_api_config.json       # PFG tokens + config
   usf_api_config.json       # US Foods tokens + config
   api_captures/             # Raw API response captures (exploration)
@@ -97,29 +108,41 @@ python3 scrape_gfs.py
 
 ---
 
-## US Foods API Notes
+## Sysco API Notes
 
-- **Base**: `https://panamax-api.ama.usfoods.com`
-- **Token refresh**: `POST auth-api/v1/oauth/token` — JSON body with `grantType: "refreshToken"`
-- **Required headers on ALL calls**: `consumer-id: ecom`, `correlation-id: ecomr4-{uuid}`, `transaction-id: {ms}`, `Origin: https://order.usfoods.com`, `usflang: en`
-- **Fall 2025 list ID**: `1000643297`
-
-## PFG CustomerFirst API Notes
-
-- **Base**: `https://apps-zz-cusfst-mw-p-eus01.azurewebsites.net/api`
-- **Token refresh**: MSAL B2C — `POST pfgcustomerfirst.b2clogin.com/.../token` (form-encoded, `client_info=1`, scope WITHOUT trailing slash)
-- **Pricing flow**: `CreateOrderEntryHeader` → `SearchProductList` → `GetOrderEntryCustomerProductPrice` → `DeleteOrderEntryHeader`
-- **Critical**: price request field is `CustomerProductPriceRequests` (not `CustomerProductPrices`); requires `BusinessUnitKey`, `OperationCompanyNumber`, `DeliveryDate`, `IgnoreRetry`
-- **Fall 2025 list ID**: `13e8ce85-8f4e-4cfe-a6dd-cac49a88dc60`
+- **Auth**: Okta SAML2 step-up flow — no browser required, pure `urllib` + `http.cookiejar`
+  1. `POST auth.shop.sysco.com/api/v1/auth/sso {email}` → redirectTo (SAML URL)
+  2. GET redirectTo → extract `stateToken` from page HTML
+  3. `POST secure.sysco.com/api/v1/authn {username, password, stateToken}` → SUCCESS
+  4. GET `secure.sysco.com/login/step-up/redirect?stateToken=...` → SAMLResponse form
+  5. `POST auth.shop.sysco.com/api/v1/auth/sso/assert` → sets `MSS_STATEFUL` cookie
+  6. GET `auth.shop.sysco.com/api/v1/auth/validate` → `{gatewayCredentials: JWT}`
+- **GraphQL**: `POST gateway-api.shop.sysco.com/graphql`
+  - Required headers: `Authorization: Bearer <gatewayCredentials>` + `syy-authorization` (base64 account context) + `syy-requested-by` (csrf_token from JWT)
+  - `GetListItemsV2` → Order Guide items (listId `66a83a1e-8c6f-4e83-820e-f485012da85f`, listType `MY_LIST`)
+  - `Prices` → `priceInfoV2.case.netPrice` per product
+- **No cookie refresh needed** — Sysco re-authenticates programmatically on every CI run
+- **Items**: 97 products in Order Guide (as of May 2026)
 
 ## GFS Gordon Food Service API Notes
 
 - **Base**: `https://order.gfs.com/us-central1/api`
-- **Auth**: Okta SAML2 session cookies — no Bearer token; cookies: `GOR`, `GCLB`, `XSRF-TOKEN`, `__Secure-GORDONORDERING2`
-- **XSRF**: Include `X-XSRF-TOKEN: <value>` header on all requests (value from XSRF-TOKEN cookie)
+- **Auth**: Okta SAML2 session cookies — `GOR`, `GCLB`, `XSRF-TOKEN`, `__Secure-GORDONORDERING2`
 - **Order guide**: `GET /v6/lists/order-guide` → `{guideCategories: [{categoryName, materialNumbers}]}`
-- **Material info**: `POST /v1/materials/info` → body is plain JSON array `["123", "456", ...]`; response `{materialInfos: [{materialNumber, brand.en, description.en}]}`
-- **Prices**: `POST /v5/prices` → body `{"materialNumbers": [...]}` ; response `{materialPrices: [{materialNumber, unitPrices: [{salesUom, price}]}]}`
-- **Customer**: naooCustomerId=`1000~10~10~722714723`, plantId=`1003` (embedded in session, no header needed)
-- **Session refresh**: cookies expire — run `intercept_gfs.py` locally, then `gh secret set GFS_COOKIES`
-- **Items**: 144 materials in order guide, 139 with prices (as of May 2026)
+- **Material info**: `POST /v1/materials/info` → plain JSON array body; response `{materialInfos: [{materialNumber, brand.en, description.en}]}`
+- **Prices**: `POST /v5/prices` → `{"materialNumbers": [...]}` ; response `{materialPrices: [{materialNumber, unitPrices: [{salesUom, price}]}]}`
+- **Session refresh**: cookies expire — run `intercept_gfs.py` locally then `gh secret set GFS_COOKIES`
+- **Items**: 144 materials, ~139 with prices
+
+## US Foods API Notes
+
+- **Base**: `https://panamax-api.ama.usfoods.com`
+- **Token refresh**: `POST auth-api/v1/oauth/token` — JSON body `grantType: "refreshToken"`
+- **Required headers**: `consumer-id: ecom`, `correlation-id: ecomr4-{uuid}`, `transaction-id: {ms}`, `Origin: https://order.usfoods.com`, `usflang: en`
+
+## PFG CustomerFirst API Notes
+
+- **Base**: `https://apps-zz-cusfst-mw-p-eus01.azurewebsites.net/api`
+- **Token refresh**: MSAL B2C — `POST pfgcustomerfirst.b2clogin.com/.../token` (form-encoded, `client_info=1`)
+- **Pricing flow**: `CreateOrderEntryHeader` → `SearchProductList` → `GetOrderEntryCustomerProductPrice` → `DeleteOrderEntryHeader`
+- **Critical**: price request field is `CustomerProductPriceRequests`; requires `BusinessUnitKey`, `OperationCompanyNumber`, `DeliveryDate`, `IgnoreRetry`

@@ -23,7 +23,7 @@ import json, os, sys, re, subprocess, urllib.request, urllib.error, urllib.parse
 # ── Config ─────────────────────────────────────────────────
 SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY     = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
-SEASON     = os.getenv("PRICE_SEASON", "Fall 2025")
+SEASON     = os.getenv("PRICE_SEASON", "Spring 2026")
 VENDOR_ID  = 2   # PFG
 
 CONFIG_FILE = os.path.expanduser("~/.FoodOrderAgent/pfg_api_config.json")

@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Scrape US Foods Fall 2025 prices
+      - name: Scrape US Foods prices
         env:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
@@ -27,6 +27,7 @@ jobs:
           USF_CONFIG:         ${{ secrets.USF_CONFIG }}
           GH_PAT:             ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY:  ${{ github.repository }}
+          PRICE_SEASON:       ${{ vars.PRICE_SEASON }}
         run: python3 scrape_usfoods.py
 
   pfg:
@@ -39,7 +40,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Scrape PFG Fall 2025 prices
+      - name: Scrape PFG prices
         env:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
@@ -47,6 +48,7 @@ jobs:
           PFG_CONFIG:         ${{ secrets.PFG_CONFIG }}
           GH_PAT:             ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY:  ${{ github.repository }}
+          PRICE_SEASON:       ${{ vars.PRICE_SEASON }}
         run: python3 scrape_pfg.py
 
   gfs:
@@ -59,9 +61,47 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Scrape GFS Fall 2025 prices
+      - name: Scrape GFS prices
         env:
           SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
           GFS_COOKIES:   ${{ secrets.GFS_COOKIES }}
+          PRICE_SEASON:  ${{ vars.PRICE_SEASON }}
         run: python3 scrape_gfs.py
+
+  sysco:
+    name: Sysco
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Scrape Sysco prices
+        env:
+          SUPABASE_URL:    ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
+          SYSCO_EMAIL:     ${{ secrets.SYSCO_EMAIL }}
+          SYSCO_PASSWORD:  ${{ secrets.SYSCO_PASSWORD }}
+          PRICE_SEASON:    ${{ vars.PRICE_SEASON }}
+        run: python3 scrape_sysco.py
+
+  report:
+    name: Basket Report
+    needs: [usfoods, pfg, gfs, sysco]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate basket report
+        env:
+          SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
+        run: python3 basket_report.py >> $GITHUB_STEP_SUMMARY
