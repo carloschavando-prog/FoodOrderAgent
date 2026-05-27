@@ -20,8 +20,9 @@ from http.server import BaseHTTPRequestHandler
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SB_URL = os.environ.get("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
-SB_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
+SB_URL  = os.environ.get("SUPABASE_URL",         "https://gnkwdoohzspomvdshzge.supabase.co")
+SB_KEY  = os.environ.get("SUPABASE_KEY",         "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
+SB_SKEY = os.environ.get("SUPABASE_SERVICE_KEY", SB_KEY)
 SB_HDRS = {
     "apikey":        SB_KEY,
     "Authorization": f"Bearer {SB_KEY}",
@@ -61,6 +62,57 @@ def sb_get(path):
     req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", headers=SB_HDRS)
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
+
+def save_inventory_snapshot(on_hand, canonical_items):
+    """
+    Persist the inventory count to Supabase for food cost tracking.
+    Creates one inventory_snapshots row + one inventory_snapshot_items row per item.
+    Non-fatal — errors are swallowed so a DB issue never blocks order generation.
+    Returns snapshot_id or None.
+    """
+    try:
+        hdrs = {
+            "apikey":        SB_SKEY,
+            "Authorization": f"Bearer {SB_SKEY}",
+            "Content-Type":  "application/json",
+            "Prefer":        "return=representation",
+        }
+        # 1. Create snapshot header row
+        req = urllib.request.Request(
+            f"{SB_URL}/rest/v1/inventory_snapshots",
+            data=json.dumps({"notes": "Auto-saved from weekly order generation"}).encode(),
+            headers=hdrs, method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            snap = json.loads(r.read())
+        snapshot_id = snap[0]["id"]
+
+        # 2. Build name → canonical item_id map
+        name_to_id = {ci["name"].lower().strip(): ci["id"] for ci in canonical_items}
+
+        # 3. Build item rows
+        snap_items = [
+            {
+                "snapshot_id": snapshot_id,
+                "item_id":     name_to_id.get(name),
+                "item_name":   name,
+                "on_hand_qty": qty,
+            }
+            for name, qty in on_hand.items()
+        ]
+
+        if snap_items:
+            req2 = urllib.request.Request(
+                f"{SB_URL}/rest/v1/inventory_snapshot_items",
+                data=json.dumps(snap_items).encode(),
+                headers=hdrs, method="POST"
+            )
+            with urllib.request.urlopen(req2, timeout=15) as r:
+                r.read()
+
+        return snapshot_id
+    except Exception:
+        return None   # non-fatal
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
@@ -638,6 +690,7 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             canonical_items, best_prices = load_data(on_hand)
+            save_inventory_snapshot(on_hand, canonical_items)   # persist count for food cost
             assignment, dropped, unassigned, notes = optimize_basket(canonical_items, best_prices)
             savings_rows, total_saved = compute_savings(assignment, canonical_items, best_prices)
             html = build_html(
