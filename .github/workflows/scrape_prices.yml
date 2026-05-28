@@ -105,3 +105,34 @@ jobs:
           SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
         run: python3 basket_report.py >> $GITHUB_STEP_SUMMARY
+
+      # Report the run's outcome to the Agent Control Board (agent_key=ordering).
+      # No-ops unless the CONTROL_BOARD_URL secret is set. Never fails the job.
+      - name: Report status to Control Board
+        if: always()
+        env:
+          CONTROL_BOARD_URL:    ${{ secrets.CONTROL_BOARD_URL }}
+          CONTROL_BOARD_SECRET: ${{ secrets.CONTROL_BOARD_SECRET }}
+          USF_RESULT: ${{ needs.usfoods.result }}
+          PFG_RESULT: ${{ needs.pfg.result }}
+          GFS_RESULT: ${{ needs.gfs.result }}
+          SYS_RESULT: ${{ needs.sysco.result }}
+        run: |
+          if [ -z "$CONTROL_BOARD_URL" ]; then
+            echo "CONTROL_BOARD_URL not set — skipping control board report"
+            exit 0
+          fi
+          FAILED=""
+          [ "$USF_RESULT" != "success" ] && FAILED="$FAILED US-Foods"
+          [ "$PFG_RESULT" != "success" ] && FAILED="$FAILED PFG"
+          [ "$GFS_RESULT" != "success" ] && FAILED="$FAILED GFS"
+          [ "$SYS_RESULT" != "success" ] && FAILED="$FAILED Sysco"
+          if [ -n "$FAILED" ]; then
+            PAYLOAD=$(printf '{"agent_key":"ordering","event":"failed","message":"Vendor price scrape failed:%s"}' "$FAILED")
+          else
+            PAYLOAD='{"agent_key":"ordering","event":"finished","output":"All 4 vendor price scrapes succeeded"}'
+          fi
+          curl -s -X POST "$CONTROL_BOARD_URL/api/report" \
+            -H "content-type: application/json" \
+            -H "x-report-secret: $CONTROL_BOARD_SECRET" \
+            -d "$PAYLOAD" || true
