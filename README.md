@@ -53,9 +53,10 @@ Each scraper:
 | `USF_CONFIG` | Secret | US Foods static config JSON |
 | `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
 | `PFG_CONFIG` | Secret | PFG static config JSON |
-| `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs.py`) |
+| `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs2.py`) |
 | `SYSCO_EMAIL` | Secret | Sysco login email (`carlos@onparbar.com`) |
 | `SYSCO_PASSWORD` | Secret | Sysco login password |
+| `SYSCO_COOKIES` | Secret | Sysco session cookies JSON — fast path that bypasses Okta (refresh by running `intercept_sysco5.py`) |
 | `PRICE_SEASON` | Variable | Season label for price_lists table (e.g. `Spring 2026`) |
 
 ---
@@ -78,9 +79,9 @@ SYSCO_PASSWORD='...' python3 scrape_sysco.py
 python3 basket_report.py
 ```
 
-### Refresh GFS cookies (when `GFS_COOKIES` secret expires):
+### Refresh GFS cookies (when `GFS_COOKIES` secret expires, ~30 days):
 ```bash
-python3 intercept_gfs.py   # opens Chrome, logs in via Okta SAML
+python3 intercept_gfs2.py   # opens Chrome, logs in via Okta SAML — fully automated
 python3 - <<'EOF'
 import json, os
 s = json.load(open(os.path.expanduser('~/.FoodOrderAgent/gfs_session.json')))
@@ -110,19 +111,28 @@ gh variable set PRICE_SEASON --body "Fall 2026" -R carloschavando-prog/FoodOrder
 
 ## Sysco API Notes
 
-- **Auth**: Okta SAML2 step-up flow — no browser required, pure `urllib` + `http.cookiejar`
-  1. `POST auth.shop.sysco.com/api/v1/auth/sso {email}` → redirectTo (SAML URL)
-  2. GET redirectTo → extract `stateToken` from page HTML
-  3. `POST secure.sysco.com/api/v1/authn {username, password, stateToken}` → SUCCESS
-  4. GET `secure.sysco.com/login/step-up/redirect?stateToken=...` → SAMLResponse form
-  5. `POST auth.shop.sysco.com/api/v1/auth/sso/assert` → sets `MSS_STATEFUL` cookie
-  6. GET `auth.shop.sysco.com/api/v1/auth/validate` → `{gatewayCredentials: JWT}`
+- **Auth** (2 paths — fast path preferred):
+  - **Fast path** (`SYSCO_COOKIES` set): loads `MSS_STATEFUL` + `TAPID` + `vid` + `JSESSIONID` from secret, calls `auth/validate` directly — no Okta needed. Refresh by running `intercept_sysco5.py`.
+  - **Okta IDX fallback** (`SYSCO_COOKIES` absent): full 6-step Okta flow. ⚠️ Sysco migrated to Okta Identity Engine (June 2026) — stateToken now starts with `02.id.` (IDX interactionHandle); scraper uses `/idp/idx/introspect` → `/idp/idx/identify` → `/idp/idx/challenge/answer` instead of old `/api/v1/authn`.
+  - Step 5-6 (both paths): `POST auth.shop.sysco.com/api/v1/auth/sso/assert` → sets `MSS_STATEFUL` cookie → `GET auth/validate` → `{gatewayCredentials: JWT}`
 - **GraphQL**: `POST gateway-api.shop.sysco.com/graphql`
   - Required headers: `Authorization: Bearer <gatewayCredentials>` + `syy-authorization` (base64 account context) + `syy-requested-by` (csrf_token from JWT)
   - `GetListItemsV2` → Order Guide items (listId `66a83a1e-8c6f-4e83-820e-f485012da85f`, listType `MY_LIST`)
   - `Prices` → `priceInfoV2.case.netPrice` per product
-- **No cookie refresh needed** — Sysco re-authenticates programmatically on every CI run
-- **Items**: 97 products in Order Guide (as of May 2026)
+- **Cookie refresh** (when `SYSCO_COOKIES` expires): run `intercept_sysco5.py` → push new `SYSCO_COOKIES` secret
+- **Items**: 97 products in Order Guide (as of June 2026)
+
+### Refresh Sysco cookies:
+```bash
+python3 intercept_sysco5.py  # opens Chrome, logs in — saves ~/.FoodOrderAgent/sysco_session.json
+python3 - <<'EOF' | gh secret set SYSCO_COOKIES -R carloschavando-prog/FoodOrderAgent
+import json, os
+s = json.load(open(os.path.expanduser('~/.FoodOrderAgent/sysco_session.json')))
+cks = {c['name']: c['value'] for c in s.get('cookies', [])}
+keep = ['MSS_STATEFUL', 'TAPID', 'vid', 'JSESSIONID']
+print(json.dumps({k: cks[k] for k in keep if k in cks}))
+EOF
+```
 
 ## GFS Gordon Food Service API Notes
 
@@ -131,8 +141,32 @@ gh variable set PRICE_SEASON --body "Fall 2026" -R carloschavando-prog/FoodOrder
 - **Order guide**: `GET /v6/lists/order-guide` → `{guideCategories: [{categoryName, materialNumbers}]}`
 - **Material info**: `POST /v1/materials/info` → plain JSON array body; response `{materialInfos: [{materialNumber, brand.en, description.en}]}`
 - **Prices**: `POST /v5/prices` → `{"materialNumbers": [...]}` ; response `{materialPrices: [{materialNumber, unitPrices: [{salesUom, price}]}]}`
-- **Session refresh**: cookies expire — run `intercept_gfs.py` locally then `gh secret set GFS_COOKIES`
-- **Items**: 144 materials, ~139 with prices
+- **⚠️ Required on all mutating calls**: `X-Requested-With: XMLHttpRequest` — without it GFS returns HTTP 218 (silent error) instead of 200
+- **Session refresh**: cookies expire ~30 days — run `intercept_gfs2.py` locally then `gh secret set GFS_COOKIES`
+- **Items**: 143 materials, ~138 with prices (June 2026)
+
+### GFS Order Placement (confirmed working 2026-05-27):
+```
+POST v8/cart                        {}
+  → {id: cartId, status, fulfillmentType, materials, ...}
+
+GET  v3/delivery-schedules
+  → {deliverySchedules: [{routeDate, customerArrivalDate, cutoffDateTime, routeId}]}
+    cutoff is 9 PM UTC the day before delivery
+
+PUT  v7/cart/{cartId}               {userLastUpdatedTimestamp:"...Z", fulfillmentType:"TRUCK",
+                                     truckFulfillment:{routeDate, customerArrivalDate},
+                                     materials:[{materialNumber, lines:[{uom:"CS",quantity:N}],
+                                                 restored:false, originTrackingId:null}]}
+
+POST v6/cart/{cartId}/submit        {splitOrders:[]}
+  → {cartOrderIds:["..."]}   (new empty cart created after submit)
+
+POST v1/orders/cancel               {orderId:"1050723762", groupNumber:"01"}   (if needed)
+```
+- Order detail URL: `https://order.gfs.com/orders/{orderNumber}/details/stock/{groupNumber}`
+- Orders list API: `GET /v7/orders`
+- Order detail API: `POST /v6/order-details` body: `{orderNumber, orderType:"STOCK", groupNumber}`
 
 ## US Foods API Notes
 
