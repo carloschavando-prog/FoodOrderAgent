@@ -12,6 +12,7 @@ import json
 import os
 import datetime
 import urllib.request
+import urllib.parse
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
 
@@ -119,9 +120,12 @@ CSS = """
 :root{--usf:#1d4e89;--pfg:#b5451b;--syc:#1a6b3c;--gfs:#7a5c00;--bg:#f4f5f7;--card:#fff}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:#1a1a2e}
-header{background:#1a1a2e;color:#fff;padding:18px 32px;display:flex;justify-content:space-between;align-items:center}
+header{background:#1a1a2e;color:#fff;padding:18px 32px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
 header h1{font-size:1.4rem;font-weight:700;letter-spacing:.03em}
 header .subtitle{font-size:.85rem;opacity:.65;margin-top:3px}
+.sheets-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;background:#0f9d58;color:#fff;border:none;border-radius:6px;font-size:.82rem;font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+.sheets-btn:hover{background:#0b8043}
+.sheets-btn svg{width:16px;height:16px;flex-shrink:0}
 .legend{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem}
 .swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
@@ -159,6 +163,27 @@ def pill(apn, vid):
 def cov_class(n):
     return f"cov{min(n, 4)}"
 
+def build_tsv(canonical_items, vendor_apns):
+    """Return tab-separated values for direct paste into Google Sheets."""
+    rows = ["\t".join(["Category", "On Par ID", "Item Description",
+                        "US Foods #", "PFG #", "Sysco #", "GFS #"])]
+    current_cat = None
+    for item in canonical_items:
+        cat_id   = item["category_id"]
+        cat_name = CAT_NAME.get(cat_id, "")
+        apns     = vendor_apns.get(item["id"], {})
+        rows.append("\t".join([
+            cat_name,
+            item["op_id"],
+            item["name"],
+            apns.get(1, ""),
+            apns.get(2, ""),
+            apns.get(3, ""),
+            apns.get(4, ""),
+        ]))
+    return "\n".join(rows)
+
+
 def build_html(canonical_items, vendor_apns):
     now     = datetime.datetime.now().strftime("%B %d, %Y at %I:%M %p")
     total   = len(canonical_items)
@@ -177,12 +202,18 @@ def build_html(canonical_items, vendor_apns):
   <div><h1>On Par — Item Master</h1>
     <div class="subtitle">Cross-Vendor Coverage &nbsp;·&nbsp; Live data &nbsp;·&nbsp; {now}</div>
   </div>
-  <div class="legend">
-    <div class="legend-item"><div class="swatch sw4"></div>All 4 vendors ({counts[4]})</div>
-    <div class="legend-item"><div class="swatch sw3"></div>3 vendors ({counts[3]})</div>
-    <div class="legend-item"><div class="swatch sw2"></div>2 vendors ({counts[2]})</div>
-    <div class="legend-item"><div class="swatch sw1"></div>1 vendor ({counts[1]})</div>
-    <div class="legend-item"><div class="swatch sw0"></div>No match ({counts[0]})</div>
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div class="legend">
+      <div class="legend-item"><div class="swatch sw4"></div>All 4 vendors ({counts[4]})</div>
+      <div class="legend-item"><div class="swatch sw3"></div>3 vendors ({counts[3]})</div>
+      <div class="legend-item"><div class="swatch sw2"></div>2 vendors ({counts[2]})</div>
+      <div class="legend-item"><div class="swatch sw1"></div>1 vendor ({counts[1]})</div>
+      <div class="legend-item"><div class="swatch sw0"></div>No match ({counts[0]})</div>
+    </div>
+    <a class="sheets-btn" href="?format=tsv" download="item_master.tsv">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 13h8v1H8v-1zm0 3h8v1H8v-1zm0-6h3v1H8v-1z"/></svg>
+      Copy for Google Sheets
+    </a>
   </div>
 </header>
 <div class="summary-bar">
@@ -227,11 +258,15 @@ def build_html(canonical_items, vendor_apns):
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        # Parse query string — support ?format=tsv for Google Sheets paste
+        qs     = urllib.parse.urlparse(self.path).query
+        params = urllib.parse.parse_qs(qs)
+        fmt    = params.get("format", ["html"])[0].lower()
+
         try:
             canonical_items, vendor_apns = load_data()
             canonical_items = assign_op_ids(canonical_items)
-            html = build_html(canonical_items, vendor_apns)
-        except Exception as e:
+        except Exception:
             import traceback
             payload = traceback.format_exc().encode()
             self.send_response(500)
@@ -241,11 +276,23 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
             return
 
-        payload = html.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type",   "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
+        if fmt == "tsv":
+            body    = build_tsv(canonical_items, vendor_apns)
+            payload = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type",        "text/tab-separated-values; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="item_master.tsv"')
+            self.send_header("Content-Length",      str(len(payload)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+        else:
+            html    = build_html(canonical_items, vendor_apns)
+            payload = html.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type",   "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+
         self.wfile.write(payload)
 
     def log_message(self, fmt, *args):
