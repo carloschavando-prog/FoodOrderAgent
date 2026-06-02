@@ -85,6 +85,7 @@ jobs:
           SUPABASE_KEY:    ${{ secrets.SUPABASE_KEY }}
           SYSCO_EMAIL:     ${{ secrets.SYSCO_EMAIL }}
           SYSCO_PASSWORD:  ${{ secrets.SYSCO_PASSWORD }}
+          SYSCO_COOKIES:   ${{ secrets.SYSCO_COOKIES }}
           PRICE_SEASON:    ${{ vars.PRICE_SEASON }}
         run: python3 scrape_sysco.py
 

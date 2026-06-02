@@ -101,11 +101,76 @@ def _extract_state_token(html_text):
 
 # ── Auth flow ─────────────────────────────────────────────────────────────────
 
+def _validate_with_cookies(cookie_str):
+    """
+    Fast path: call auth/validate with a pre-existing MSS_STATEFUL session cookie.
+    Returns (bearer_header, shop_account_id, csrf_token, vid) or raises.
+    Used when SYSCO_COOKIES env var is set (avoids Okta flow entirely).
+    """
+    jar    = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+    validate_req = urllib.request.Request(
+        f"{AUTH_BASE}/api/v1/auth/validate",
+        headers={
+            "Cookie":     cookie_str,
+            "User-Agent": _UA,
+            "Accept":     "application/json",
+            "Origin":     "https://shop.sysco.com",
+            "Referer":    "https://shop.sysco.com/",
+        },
+    )
+    with opener.open(validate_req, timeout=20) as r:
+        validate_resp = json.loads(r.read())
+
+    role = validate_resp.get("role", "")
+    if role != "CUSTOMER":
+        raise RuntimeError(
+            f"SYSCO_COOKIES session expired (role={role!r}). "
+            "Re-run intercept_sysco5.py locally and update SYSCO_COOKIES secret."
+        )
+
+    creds = validate_resp.get("gatewayCredentials", "")
+    shop_account_id = validate_resp.get("shopAccountId", SHOP_ACCOUNT_ID)
+
+    try:
+        payload_b64 = creds.split(".")[1]
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        jwt_payload = json.loads(base64.b64decode(payload_b64))
+        csrf_token  = jwt_payload.get("csrf_token", "")
+        vid         = jwt_payload.get("vid", "")
+    except Exception:
+        csrf_token = ""
+        vid        = ""
+
+    return f"Bearer {creds}", shop_account_id, csrf_token, vid
+
+
 def get_bearer_token(email, password):
     """
     Authenticate via Okta SAML2 step-up flow and return
-    (bearer_header, shop_account_id).
+    (bearer_header, shop_account_id, csrf_token, vid).
+
+    Fast path: if SYSCO_COOKIES env var is set (JSON dict of key→value or
+    a cookie header string), calls auth/validate directly without Okta.
     """
+    # ── Fast path: session cookies already captured ───────────────────────────
+    sysco_cookies_raw = os.getenv("SYSCO_COOKIES", "")
+    if sysco_cookies_raw:
+        print("  Cookies loaded from SYSCO_COOKIES env var — skipping Okta ...")
+        try:
+            # Accept either JSON dict {"MSS_STATEFUL": "...", ...} or raw cookie string
+            if sysco_cookies_raw.strip().startswith("{"):
+                cdict = json.loads(sysco_cookies_raw)
+                cookie_str = "; ".join(f"{k}={v}" for k, v in cdict.items() if v)
+            else:
+                cookie_str = sysco_cookies_raw
+            return _validate_with_cookies(cookie_str)
+        except RuntimeError:
+            raise
+        except Exception as ex:
+            print(f"  ⚠️  Cookie fast path failed ({ex}) — falling back to Okta flow ...")
+
     jar    = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
@@ -153,54 +218,162 @@ def get_bearer_token(email, password):
         )
     print(f"  [2] stateToken: {state_token[:30]}...")
 
-    # ── Step 3: POST authn with username + password ───────────────────────────
-    print("  [3] POST authn (password) ...")
-    authn_req = urllib.request.Request(
-        f"{OKTA_BASE}/api/v1/authn",
-        data=json.dumps({
-            "password":   password,
-            "username":   email,
-            "options":    {"warnBeforePasswordExpired": True,
-                           "multiOptionalFactorEnroll": False},
-            "stateToken": state_token,
-        }).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Accept":       "application/json",
+    # ── Step 3: Authenticate — IDX API (new) or Classic API (old) ───────────────
+    # Okta Identity Engine tokens start with "02.id." and require the IDX API.
+    # Classic tokens use /api/v1/authn; IDX tokens use /idp/idx/identify.
+    if state_token.startswith("02."):
+        print("  [3] Okta IDX flow detected (interactionHandle starts with 02.) ...")
+        _idx_headers = {
+            "Content-Type": "application/ion+json; okta-version=1.0.0",
+            "Accept":       "application/ion+json; okta-version=1.0.0",
             "User-Agent":   _UA,
             "Origin":       OKTA_BASE,
             "Referer":      f"{OKTA_BASE}/",
-        },
-    )
-    try:
-        with opener.open(authn_req, timeout=20) as r:
-            authn_resp = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()[:400]
-        raise RuntimeError(f"Okta /api/v1/authn → {e.code}: {body}")
+        }
 
-    status = authn_resp.get("status", "")
-    if status != "SUCCESS":
-        raise RuntimeError(
-            f"Okta authn failed: status={status}. "
-            f"Response: {json.dumps(authn_resp)[:300]}"
+        # 3a. Introspect — exchange interactionHandle for an IDX state
+        introspect_req = urllib.request.Request(
+            f"{OKTA_BASE}/idp/idx/introspect",
+            data=json.dumps({"interactionHandle": state_token}).encode(),
+            headers=_idx_headers,
         )
-    print(f"  [3] authn status: {status}")
+        try:
+            with opener.open(introspect_req, timeout=20) as r:
+                introspect_resp = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()[:400]
+            raise RuntimeError(f"Okta IDX /introspect → {e.code}: {body}")
 
-    # ── Step 4: GET step-up redirect → HTML form with SAMLResponse ────────────
-    print("  [4] GET step-up/redirect ...")
-    step_url = (f"{OKTA_BASE}/login/step-up/redirect"
-                f"?stateToken={urllib.parse.quote(state_token)}")
-    step_req = urllib.request.Request(
-        step_url,
-        headers={
-            "User-Agent": _UA,
-            "Accept":     "text/html,application/xhtml+xml,*/*",
-            "Referer":    f"{OKTA_BASE}/",
-        },
-    )
-    with opener.open(step_req, timeout=20) as r:
-        step_html = r.read().decode("utf-8", errors="replace")
+        state_handle = introspect_resp.get("stateHandle", "")
+        print(f"  [3a] stateHandle: {state_handle[:30]}...")
+
+        # 3b. Identify — submit username
+        identify_req = urllib.request.Request(
+            f"{OKTA_BASE}/idp/idx/identify",
+            data=json.dumps({
+                "identifier":   email,
+                "rememberMe":   False,
+                "stateHandle":  state_handle,
+            }).encode(),
+            headers=_idx_headers,
+        )
+        try:
+            with opener.open(identify_req, timeout=20) as r:
+                identify_resp = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()[:400]
+            raise RuntimeError(f"Okta IDX /identify → {e.code}: {body}")
+
+        # Grab updated stateHandle for the challenge step
+        state_handle = identify_resp.get("stateHandle", state_handle)
+
+        # 3c. Challenge/answer — submit password
+        answer_req = urllib.request.Request(
+            f"{OKTA_BASE}/idp/idx/challenge/answer",
+            data=json.dumps({
+                "credentials": {"passcode": password},
+                "stateHandle": state_handle,
+            }).encode(),
+            headers=_idx_headers,
+        )
+        try:
+            with opener.open(answer_req, timeout=20) as r:
+                answer_resp = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()[:400]
+            raise RuntimeError(f"Okta IDX /challenge/answer → {e.code}: {body}")
+
+        print(f"  [3c] IDX answer keys: {list(answer_resp.keys())}")
+
+        # IDX success — the redirect URL with SAMLResponse is in successWithInteractionCode
+        # or in a redirect value; follow the success redirect to get the SAML form
+        success_url = None
+        if "successWithInteractionCode" in answer_resp:
+            href = (answer_resp["successWithInteractionCode"]
+                    .get("href") or answer_resp["successWithInteractionCode"]
+                    .get("value", [{}])[0].get("href", ""))
+            success_url = href
+        elif "success" in answer_resp:
+            success_url = answer_resp["success"].get("href", "")
+
+        if not success_url:
+            # Try to find any redirect in the response
+            for key in ("redirect", "location"):
+                if key in answer_resp:
+                    success_url = answer_resp[key].get("href", "")
+                    break
+
+        print(f"  [3c] success_url: {(success_url or 'NOT FOUND')[:80]}")
+        if not success_url:
+            with open("/tmp/sysco_idx_answer_debug.json", "w") as f:
+                json.dump(answer_resp, f, indent=2)
+            raise RuntimeError(
+                f"IDX answer did not return a success URL. "
+                f"Keys: {list(answer_resp.keys())}. "
+                f"Debug saved to /tmp/sysco_idx_answer_debug.json"
+            )
+
+        # Follow the success redirect → lands on the SAML assertion POST page
+        step_req = urllib.request.Request(
+            success_url,
+            headers={
+                "User-Agent": _UA,
+                "Accept":     "text/html,application/xhtml+xml,*/*",
+                "Referer":    f"{OKTA_BASE}/",
+            },
+        )
+        with opener.open(step_req, timeout=20) as r:
+            step_html = r.read().decode("utf-8", errors="replace")
+
+    else:
+        # ── Classic Okta API (stateToken does NOT start with "02.") ──────────
+        print("  [3] Classic Okta authn flow ...")
+        authn_req = urllib.request.Request(
+            f"{OKTA_BASE}/api/v1/authn",
+            data=json.dumps({
+                "password":   password,
+                "username":   email,
+                "options":    {"warnBeforePasswordExpired": True,
+                               "multiOptionalFactorEnroll": False},
+                "stateToken": state_token,
+            }).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Accept":       "application/json",
+                "User-Agent":   _UA,
+                "Origin":       OKTA_BASE,
+                "Referer":      f"{OKTA_BASE}/",
+            },
+        )
+        try:
+            with opener.open(authn_req, timeout=20) as r:
+                authn_resp = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()[:400]
+            raise RuntimeError(f"Okta /api/v1/authn → {e.code}: {body}")
+
+        status = authn_resp.get("status", "")
+        if status != "SUCCESS":
+            raise RuntimeError(
+                f"Okta authn failed: status={status}. "
+                f"Response: {json.dumps(authn_resp)[:300]}"
+            )
+        print(f"  [3] authn status: {status}")
+
+        # ── Step 4: GET step-up redirect → HTML form with SAMLResponse ────────
+        print("  [4] GET step-up/redirect ...")
+        step_url = (f"{OKTA_BASE}/login/step-up/redirect"
+                    f"?stateToken={urllib.parse.quote(state_token)}")
+        step_req = urllib.request.Request(
+            step_url,
+            headers={
+                "User-Agent": _UA,
+                "Accept":     "text/html,application/xhtml+xml,*/*",
+                "Referer":    f"{OKTA_BASE}/",
+            },
+        )
+        with opener.open(step_req, timeout=20) as r:
+            step_html = r.read().decode("utf-8", errors="replace")
 
     parser = _FormParser()
     parser.feed(step_html)
@@ -730,9 +903,10 @@ def main():
     print("── Sysco Price Scraper ────────────────────────────────")
 
     password = os.getenv("SYSCO_PASSWORD", "")
-    if not password:
-        print("❌ SYSCO_PASSWORD env var not set.")
-        print("   Set it in CI secrets or locally:  export SYSCO_PASSWORD='...'")
+    # SYSCO_COOKIES (session cookie fast path) doesn't need the password
+    if not password and not os.getenv("SYSCO_COOKIES"):
+        print("❌ SYSCO_PASSWORD env var not set (and no SYSCO_COOKIES fallback).")
+        print("   Set SYSCO_PASSWORD in CI secrets, or run intercept_sysco5.py and set SYSCO_COOKIES.")
         sys.exit(1)
 
     # 1. Authenticate
