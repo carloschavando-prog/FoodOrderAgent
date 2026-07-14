@@ -63,6 +63,19 @@ def sb_get(path):
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 
+def sb_get_all(path, page_size=1000):
+    rows = []
+    offset = 0
+    while True:
+        hdrs = {**SB_HDRS, "Range": f"{offset}-{offset + page_size - 1}"}
+        req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", headers=hdrs)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            page = json.loads(r.read())
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
 def save_inventory_snapshot(on_hand, canonical_items):
     """
     Persist the inventory count to Supabase for food cost tracking.
@@ -121,7 +134,7 @@ def load_data(on_hand):
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
     Returns canonical_items list + best_prices dict
     """
-    raw_items = sb_get(
+    raw_items = sb_get_all(
         "items?select=id,name,category_id,pack_size,par_level,"
         "preferred_vendor_id&order=id.asc"
     )
@@ -165,7 +178,7 @@ def load_data(on_hand):
             id_to_canonical[iid] = ci["id"]
 
     # Load pricing — newest write per (canonical_id, vendor_id) wins
-    all_pricing = sb_get(
+    all_pricing = sb_get_all(
         "pricing?select=item_id,vendor_id,apn,price,price_list_id"
         "&order=price_list_id.asc"
     )

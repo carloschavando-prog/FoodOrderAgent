@@ -77,6 +77,19 @@ def sb_get(path):
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())
 
+def sb_get_all(path, page_size=1000):
+    rows = []
+    offset = 0
+    while True:
+        hdrs = {**SB_HDRS, "Range": f"{offset}-{offset + page_size - 1}"}
+        req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", headers=hdrs)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            page = json.loads(r.read())
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 def load_data(on_hand=None):
@@ -86,8 +99,8 @@ def load_data(on_hand=None):
     When None, order_qty = par_level  (standard par-cycle run)
     """
     print("→ Loading items...")
-    raw_items = sb_get("items?select=id,name,category_id,pack_size,par_level,"
-                       "preferred_vendor_id&order=id.asc")
+    raw_items = sb_get_all("items?select=id,name,category_id,pack_size,par_level,"
+                           "preferred_vendor_id&order=id.asc")
 
     # Deduplicate: group by lower-cased name, keep lowest id as canonical
     name_groups = defaultdict(list)
@@ -135,7 +148,7 @@ def load_data(on_hand=None):
 
     # Load all pricing (broadliners only), newest price wins per (canonical_id, vendor_id)
     print("→ Loading pricing...")
-    all_pricing = sb_get(
+    all_pricing = sb_get_all(
         "pricing?select=item_id,vendor_id,apn,price,price_list_id"
         "&order=price_list_id.asc"
     )

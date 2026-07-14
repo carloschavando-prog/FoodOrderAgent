@@ -4,7 +4,7 @@ GET /api/item_master
 Returns the live cross-vendor item master as text/html.
 Queries Supabase on every request — always shows current data.
 
-Columns: On Par ID | Item Description | US Foods # | PFG # | Sysco # | GFS #
+Columns: On Par ID | Item Description | vendor item #, price, scrape time
 Grouped by category, color-coded by vendor coverage.
 """
 
@@ -13,8 +13,14 @@ import os
 import datetime
 import urllib.request
 import urllib.parse
+import html
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -56,10 +62,23 @@ def sb_get(path):
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 
+def sb_get_all(path, page_size=1000):
+    rows = []
+    offset = 0
+    while True:
+        hdrs = {**SB_HDRS, "Range": f"{offset}-{offset + page_size - 1}"}
+        req = urllib.request.Request(f"{SB_URL}/rest/v1/{path}", headers=hdrs)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            page = json.loads(r.read())
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
 # ── Data ──────────────────────────────────────────────────────────────────────
 
 def load_data():
-    raw_items = sb_get("items?select=id,name,category_id&order=id.asc")
+    raw_items = sb_get_all("items?select=id,name,category_id&order=id.asc")
 
     name_groups = defaultdict(list)
     id_to_item  = {}
@@ -87,23 +106,32 @@ def load_data():
         for iid in ci["all_ids"]:
             id_to_canonical[iid] = ci["id"]
 
-    # Best APN per (canonical_id, vendor_id) — highest price_list_id wins
-    all_pricing = sb_get(
-        "pricing?select=item_id,vendor_id,apn,price_list_id"
+    price_lists = sb_get_all("price_lists?select=id,pulled_at")
+    price_list_pulled_at = {row["id"]: row.get("pulled_at") for row in price_lists}
+
+    # Best pricing row per (canonical_id, vendor_id) — highest price_list_id wins
+    all_pricing = sb_get_all(
+        "pricing?select=item_id,vendor_id,apn,price,price_list_id,pulled_at"
         "&order=price_list_id.asc"
     )
-    vendor_apns = defaultdict(dict)
+    vendor_prices = defaultdict(dict)
     for row in all_pricing:
         vid = row["vendor_id"]
         if vid not in VENDOR_IDS:
             continue
         apn = row.get("apn") or ""
-        if not apn:
+        price = row.get("price")
+        if not apn and price is None:
             continue
         can_id = id_to_canonical.get(row["item_id"], row["item_id"])
-        vendor_apns[can_id][vid] = apn
+        pulled_at = price_list_pulled_at.get(row.get("price_list_id")) or row.get("pulled_at")
+        vendor_prices[can_id][vid] = {
+            "apn": apn,
+            "price": price,
+            "pulled_at": pulled_at,
+        }
 
-    return canonical_items, dict(vendor_apns)
+    return canonical_items, dict(vendor_prices)
 
 def assign_op_ids(items):
     cat_counter = {}
@@ -151,48 +179,85 @@ td{padding:8px 12px;vertical-align:middle}
 td.apn{text-align:center;font-family:'SF Mono','Fira Code',monospace;font-size:.78rem}
 td.blank{text-align:center;color:#ced4da}
 .cov4{background:#f0faf3} .cov3{background:#f0f8fb} .cov2{background:#fffdf0} .cov1{background:#fff7f7} .cov0{background:#f5f5f5}
+.vendor-cell{display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2}
 .pill{display:inline-block;padding:2px 7px;border-radius:12px;font-size:.72rem;font-weight:600}
+.price{font-weight:700;color:#1a1a2e}
+.scraped{font-size:.68rem;color:#6c757d;white-space:nowrap}
 .op-id{font-family:'SF Mono','Fira Code',monospace;font-size:.75rem;color:#6c757d;font-weight:600}
 .item-name{font-weight:500}
 """
 
-def pill(apn, vid):
+def fmt_money(value):
+    if value is None:
+        return ""
+    try:
+        return f"${float(value):,.2f}"
+    except (TypeError, ValueError):
+        return ""
+
+def fmt_scrape_time(value):
+    if not value:
+        return ""
+    raw = str(value).replace("Z", "+00:00")
+    try:
+        dt = datetime.datetime.fromisoformat(raw)
+        if dt.tzinfo:
+            tz = ZoneInfo("America/New_York") if ZoneInfo else datetime.timezone(datetime.timedelta(hours=-5))
+            dt = dt.astimezone(tz)
+        return dt.strftime("%m/%d/%Y %I:%M %p")
+    except ValueError:
+        return str(value)
+
+def vendor_cell(data, vid):
     dark, light = VENDOR_COLOR.get(vid, ("#333","#eee"))
-    return f'<span class="pill" style="background:{light};color:{dark}">{apn}</span>'
+    apn = html.escape(str(data.get("apn") or ""))
+    price = fmt_money(data.get("price"))
+    scraped = fmt_scrape_time(data.get("pulled_at"))
+    parts = ['<div class="vendor-cell">']
+    if apn:
+        parts.append(f'<span class="pill" style="background:{light};color:{dark}">{apn}</span>')
+    if price:
+        parts.append(f'<div class="price">{price}</div>')
+    if scraped:
+        parts.append(f'<div class="scraped">{html.escape(scraped)}</div>')
+    parts.append("</div>")
+    return "".join(parts)
 
 def cov_class(n):
     return f"cov{min(n, 4)}"
 
-def build_tsv(canonical_items, vendor_apns):
+def build_tsv(canonical_items, vendor_prices):
     """Return tab-separated values for direct paste into Google Sheets."""
-    rows = ["\t".join(["Category", "On Par ID", "Item Description",
-                        "US Foods #", "PFG #", "Sysco #", "GFS #"])]
-    current_cat = None
+    headers = ["Category", "On Par ID", "Item Description"]
+    for vid in VENDOR_IDS:
+        vendor = VENDOR_NAMES[vid]
+        headers.extend([f"{vendor} #", f"{vendor} Price", f"{vendor} Last Scraped"])
+    rows = ["\t".join(headers)]
     for item in canonical_items:
         cat_id   = item["category_id"]
         cat_name = CAT_NAME.get(cat_id, "")
-        apns     = vendor_apns.get(item["id"], {})
-        rows.append("\t".join([
-            cat_name,
-            item["op_id"],
-            item["name"],
-            apns.get(1, ""),
-            apns.get(2, ""),
-            apns.get(3, ""),
-            apns.get(4, ""),
-        ]))
+        prices   = vendor_prices.get(item["id"], {})
+        row = [cat_name, item["op_id"], item["name"]]
+        for vid in VENDOR_IDS:
+            data = prices.get(vid, {})
+            row.extend([
+                str(data.get("apn") or ""),
+                fmt_money(data.get("price")),
+                fmt_scrape_time(data.get("pulled_at")),
+            ])
+        rows.append("\t".join(row))
     return "\n".join(rows)
 
 
-def build_html(canonical_items, vendor_apns):
+def build_html(canonical_items, vendor_prices):
     now     = datetime.datetime.now().strftime("%B %d, %Y at %I:%M %p")
     total   = len(canonical_items)
     counts  = [sum(1 for ci in canonical_items
-                   if len(vendor_apns.get(ci["id"], {})) == n)
+                   if len(vendor_prices.get(ci["id"], {})) == n)
                for n in range(5)]
 
     def vendor_count(vid):
-        return sum(1 for ci in canonical_items if vid in vendor_apns.get(ci["id"], {}))
+        return sum(1 for ci in canonical_items if vid in vendor_prices.get(ci["id"], {}))
 
     h = [f"""<!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -238,16 +303,16 @@ def build_html(canonical_items, vendor_apns):
         cat_id = item["category_id"]
         if cat_id != current_cat:
             current_cat = cat_id
-            h.append(f'<tr class="cat-row"><td colspan="6">{CAT_NAME.get(cat_id, "")}</td></tr>')
-        apns  = vendor_apns.get(item["id"], {})
-        n     = len(apns)
+            h.append(f'<tr class="cat-row"><td colspan="6">{html.escape(CAT_NAME.get(cat_id, ""))}</td></tr>')
+        prices = vendor_prices.get(item["id"], {})
+        n      = len(prices)
         cells = "".join(
-            f'<td class="apn">{pill(apns[v], v)}</td>' if v in apns else '<td class="blank">—</td>'
+            f'<td class="apn">{vendor_cell(prices[v], v)}</td>' if v in prices else '<td class="blank">—</td>'
             for v in [1, 2, 3, 4]
         )
         h.append(f'<tr class="{cov_class(n)}">'
-                 f'<td class="op-id">{item["op_id"]}</td>'
-                 f'<td class="item-name">{item["name"]}</td>'
+                 f'<td class="op-id">{html.escape(item["op_id"])}</td>'
+                 f'<td class="item-name">{html.escape(item["name"])}</td>'
                  f'{cells}</tr>')
 
     h.append("</tbody></table></div></body></html>")
@@ -264,7 +329,7 @@ class handler(BaseHTTPRequestHandler):
         fmt    = params.get("format", ["html"])[0].lower()
 
         try:
-            canonical_items, vendor_apns = load_data()
+            canonical_items, vendor_prices = load_data()
             canonical_items = assign_op_ids(canonical_items)
         except Exception:
             import traceback
@@ -277,7 +342,7 @@ class handler(BaseHTTPRequestHandler):
             return
 
         if fmt == "tsv":
-            body    = build_tsv(canonical_items, vendor_apns)
+            body    = build_tsv(canonical_items, vendor_prices)
             payload = body.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type",        "text/tab-separated-values; charset=utf-8")
@@ -286,7 +351,7 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
         else:
-            html    = build_html(canonical_items, vendor_apns)
+            html    = build_html(canonical_items, vendor_prices)
             payload = html.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type",   "text/html; charset=utf-8")

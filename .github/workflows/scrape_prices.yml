@@ -2,11 +2,14 @@ name: Scrape Vendor Prices
 
 on:
   schedule:
-    # Tuesday 5:00 AM Eastern (09:00 UTC — EDT/UTC-4)
-    - cron: '0 9 * * 2'
-    # Thursday 5:00 AM Eastern (09:00 UTC)
-    - cron: '0 9 * * 4'
+    # Daily 5:00 AM Eastern during daylight time (09:00 UTC).
+    # GitHub cron runs in UTC; adjust to 10:00 UTC after the DST change if needed.
+    - cron: '0 9 * * *'
   workflow_dispatch:   # allow manual trigger from GitHub UI
+
+concurrency:
+  group: vendor-price-scrape
+  cancel-in-progress: false
 
 jobs:
   usfoods:
