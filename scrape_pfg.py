@@ -401,11 +401,12 @@ def main():
     rows = []
     for p in products:
         key = p["ProductKey"].upper()
+        priced_uoms = []
         for uom in p["UOMs"]:
             uom_type = uom["UnitOfMeasure"]
             price    = price_map.get((key, uom_type))
             if price:
-                rows.append({
+                priced_uoms.append({
                     "product_key":   key,
                     "product_number": p["ProductNumber"],
                     "name":          p["ProductDescription"],
@@ -415,6 +416,8 @@ def main():
                     "uom_abbr":      uom["UnitOfMeasureAbbr"],
                     "pack_size":     uom["PackSize"],
                 })
+        if priced_uoms:
+            rows.append(next((r for r in priced_uoms if r["uom_abbr"] == "CS"), priced_uoms[0]))
 
     print(f"\nProducts with prices: {len(rows)} / {len(products)} products")
     for r in rows[:8]:
@@ -445,6 +448,7 @@ def main():
                 "price_list_id": pl_id,
                 "apn":           r["product_number"],
                 "price":         r["price"],
+                "pack_size":     r["pack_size"],
                 "vendor_item_name": r["name"],
             }, "item_id,vendor_id,price_list_id")
             matched += 1
