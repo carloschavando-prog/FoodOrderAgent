@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS vendors (
 INSERT INTO vendors (name, contact, phone, min_order, order_notes) VALUES
   ('US FOODS',    'Jason Brandell',  '937-901-7211', '20 cases',   'Order by Monday 2:00 for Tuesday delivery'),
   ('PFG',         'Chris Tamillo',   '937-608-6599', '20 cases',   'Order by Thursday 2:00 for Thursday delivery'),
-  ('SYSCO',       'Aaron Huber',     '937-204-5659', '15 cases',   NULL),
+  ('SYSCO',       'Aaron Huber',     '937-204-5659', '20 cases',   NULL),
   ('GFS',         'Mark Lasson',     '937-815-6861', '$750 min',   NULL),
   ('I SUPPLY',    NULL,              NULL,           NULL,         NULL),
   ('MARKETS DEPOT', NULL,            NULL,           NULL,         NULL),

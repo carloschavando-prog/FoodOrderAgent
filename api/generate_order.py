@@ -41,7 +41,7 @@ VENDOR_COLOR   = {
 MINIMUMS = {
     1: ("cases",   20),
     2: ("cases",   20),
-    3: ("cases",   15),
+    3: ("cases",   20),
     4: ("dollars", 750),
 }
 CAT_ORDER = [

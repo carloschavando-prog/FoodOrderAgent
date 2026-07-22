@@ -8,7 +8,7 @@ then enforces vendor order minimums.
 Vendor minimums:
   US Foods (1) : 20 cases
   PFG      (2) : 20 cases
-  Sysco    (3) : 15 cases
+  Sysco    (3) : 20 cases
   GFS      (4) : $750 purchase
 
 Algorithm:
@@ -54,7 +54,7 @@ VENDOR_COLOR   = {
 MINIMUMS = {
     1: ("cases",   20),   # US Foods: 20 cases
     2: ("cases",   20),   # PFG: 20 cases
-    3: ("cases",   15),   # Sysco: 15 cases
+    3: ("cases",   20),   # Sysco: 20 cases
     4: ("dollars", 750),  # GFS: $750
 }
 
