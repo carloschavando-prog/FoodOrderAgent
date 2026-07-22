@@ -55,6 +55,16 @@ CAT_ORDER = [
     (8, "Chemical Room"),
     (9, "Beverage Dock"),
 ]
+SAFE_FILLER_CATEGORY_IDS = {4, 5, 7, 8}  # Dry Stock, Disposables, Freezer, Chemical Room
+FILLER_CAPS_BY_CATEGORY = {
+    1: 2,  # Paper Goods
+    4: 1,  # Dry Stock
+    5: 2,  # Disposables
+    7: 1,  # Freezer
+    8: 1,  # Chemical Room
+}
+MIN_RESCUE_SAVINGS = 25.0
+LOW_FILLER_SPEND_LIMIT = 50.0
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
@@ -203,44 +213,233 @@ def meets_minimum(vid, cases, spend):
     min_type, min_val = MINIMUMS[vid]
     return spend >= min_val if min_type == "dollars" else cases >= min_val
 
-def calc_totals(assignment, items_by_id, best_prices):
+def minimum_label(vid):
+    min_type, min_val = MINIMUMS[vid]
+    return f"${min_val:,.0f}" if min_type == "dollars" else f"{min_val} cases"
+
+def assign_cheapest(canonical_items, best_prices, active):
+    assignment = {}
+    for ci in canonical_items:
+        if ci["order_qty"] <= 0:
+            continue
+        opts = {
+            v: best_prices[ci["id"]][v]
+            for v in active
+            if ci["id"] in best_prices and v in best_prices[ci["id"]]
+        }
+        if opts:
+            assignment[ci["id"]] = min(opts, key=lambda v: opts[v]["price"])
+    return assignment
+
+def filler_cap(item):
+    name = item["name"].lower()
+    if "glove" in name:
+        return 2
+    cat_id = item["category_id"]
+    if cat_id == 1 or cat_id in SAFE_FILLER_CATEGORY_IDS:
+        return FILLER_CAPS_BY_CATEGORY.get(cat_id, 0)
+    return 0
+
+def filler_safety_rank(item):
+    name = item["name"].lower()
+    if "glove" in name:
+        return 0
+    return {5: 1, 8: 2, 1: 3, 4: 4, 7: 5}.get(item["category_id"], 9)
+
+def filter_filler_cases(filler_cases, active):
+    return {
+        key: qty
+        for key, qty in filler_cases.items()
+        if key[1] in active and qty > 0
+    }
+
+def calc_totals(assignment, items_by_id, best_prices, filler_cases=None):
     vendor_items = defaultdict(list)
     vendor_cases = defaultdict(int)
     vendor_spend = defaultdict(float)
-    for can_id, vid in assignment.items():
+    entry_index = {}
+
+    def add_entry(can_id, vid, cases, filler_qty=0):
+        if cases <= 0:
+            return
         item  = items_by_id[can_id]
-        cases = max(1, int(item["order_qty"]))
         pdata = best_prices[can_id][vid]
         price = pdata["price"]
         apn   = pdata.get("apn", "")
-        vendor_items[vid].append({
-            "item": item, "cases": cases, "price": price,
-            "apn": apn, "subtotal": round(cases * price, 2),
-        })
+        key = (vid, can_id)
+        if key in entry_index:
+            entry = entry_index[key]
+            entry["cases"] += cases
+            entry["filler_cases"] += filler_qty
+            entry["subtotal"] = round(entry["cases"] * price, 2)
+        else:
+            entry = {
+                "item": item, "cases": cases, "price": price,
+                "apn": apn, "subtotal": round(cases * price, 2),
+                "base_cases": cases - filler_qty,
+                "filler_cases": filler_qty,
+            }
+            vendor_items[vid].append(entry)
+            entry_index[key] = entry
         vendor_cases[vid] += cases
         vendor_spend[vid] += cases * price
+
+    for can_id, vid in assignment.items():
+        item = items_by_id[can_id]
+        cases = max(1, int(item["order_qty"]))
+        add_entry(can_id, vid, cases, 0)
+
+    for (can_id, vid), extra_cases in (filler_cases or {}).items():
+        if extra_cases <= 0 or can_id not in items_by_id:
+            continue
+        if can_id not in best_prices or vid not in best_prices[can_id]:
+            continue
+        add_entry(can_id, vid, int(extra_cases), int(extra_cases))
+
     return dict(vendor_items), dict(vendor_cases), dict(vendor_spend)
+
+def basket_total(assignment, items_by_id, best_prices, filler_cases=None):
+    _, _, vendor_spend = calc_totals(assignment, items_by_id, best_prices, filler_cases)
+    return sum(vendor_spend.values())
+
+def settle_by_dropping(canonical_items, best_prices, active, filler_cases=None):
+    items_by_id = {ci["id"]: ci for ci in canonical_items}
+    active = set(active)
+    dropped = set()
+    assignment = {}
+    for _ in range(10):
+        assignment = assign_cheapest(canonical_items, best_prices, active)
+        active_fillers = filter_filler_cases(filler_cases or {}, active)
+        _, vendor_cases, vendor_spend = calc_totals(
+            assignment, items_by_id, best_prices, active_fillers
+        )
+        failing = {
+            v for v in active
+            if vendor_cases.get(v, 0) > 0
+            and not meets_minimum(v, vendor_cases.get(v, 0), vendor_spend.get(v, 0.0))
+        }
+        if not failing:
+            break
+        for vid in sorted(failing, key=lambda v: vendor_spend.get(v, 0)):
+            active.discard(vid)
+            dropped.add(vid)
+    return assignment, active, dropped
+
+def build_rescue_fillers(vid, canonical_items, best_prices, assignment, filler_cases):
+    items_by_id = {ci["id"]: ci for ci in canonical_items}
+    _, start_cases, start_spend = calc_totals(assignment, items_by_id, best_prices, filler_cases)
+    if meets_minimum(vid, start_cases.get(vid, 0), start_spend.get(vid, 0.0)):
+        return {}
+
+    candidates = []
+    for ci in canonical_items:
+        cap = filler_cap(ci)
+        if cap <= 0:
+            continue
+        price_row = best_prices.get(ci["id"], {}).get(vid)
+        if not price_row:
+            continue
+        used = filler_cases.get((ci["id"], vid), 0)
+        remaining = cap - used
+        if remaining <= 0:
+            continue
+        candidates.append({
+            "item": ci,
+            "price": price_row["price"],
+            "remaining": remaining,
+            "need": max(float(ci.get("order_qty") or 0), float(ci.get("par_level") or 0)),
+            "safe_rank": filler_safety_rank(ci),
+        })
+
+    if not candidates:
+        return {}
+
+    strategies = [
+        ("lowest cost", lambda c: (c["price"], -c["need"], c["safe_rank"], c["item"]["name"].lower())),
+        ("quick cycle", lambda c: (-c["need"], c["price"], c["safe_rank"], c["item"]["name"].lower())),
+        ("safe stock", lambda c: (c["safe_rank"], c["price"], -c["need"], c["item"]["name"].lower())),
+    ]
+    best_plan = None
+    for strategy_name, sort_key in strategies:
+        trial = dict(filler_cases)
+        added = defaultdict(int)
+        for c in sorted(candidates, key=sort_key):
+            can_id = c["item"]["id"]
+            for _ in range(int(c["remaining"])):
+                _, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices, trial)
+                if meets_minimum(vid, vendor_cases.get(vid, 0), vendor_spend.get(vid, 0.0)):
+                    break
+                key = (can_id, vid)
+                trial[key] = trial.get(key, 0) + 1
+                added[key] += 1
+            _, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices, trial)
+            if meets_minimum(vid, vendor_cases.get(vid, 0), vendor_spend.get(vid, 0.0)):
+                break
+
+        _, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices, trial)
+        if not meets_minimum(vid, vendor_cases.get(vid, 0), vendor_spend.get(vid, 0.0)):
+            continue
+        filler_spend = sum(
+            qty * best_prices[can_id][fvid]["price"]
+            for (can_id, fvid), qty in added.items()
+            if fvid == vid
+        )
+        filler_count = sum(qty for (_, fvid), qty in added.items() if fvid == vid)
+        plan = {
+            "strategy": strategy_name,
+            "added": dict(added),
+            "filler_spend": filler_spend,
+            "filler_count": filler_count,
+            "cases": vendor_cases.get(vid, 0),
+            "spend": vendor_spend.get(vid, 0.0),
+        }
+        if best_plan is None or (plan["filler_spend"], plan["filler_count"]) < (best_plan["filler_spend"], best_plan["filler_count"]):
+            best_plan = plan
+    return best_plan or {}
+
+def count_unassigned(canonical_items, assignment):
+    return sum(1 for ci in canonical_items if ci["order_qty"] > 0 and ci["id"] not in assignment)
+
+def rescue_note(vid, plan, savings_vs_drop, items_by_id):
+    pieces = []
+    for (can_id, fvid), qty in sorted(plan["added"].items(), key=lambda x: items_by_id[x[0][0]]["name"].lower()):
+        if fvid == vid and qty > 0:
+            pieces.append(f'{qty} case{"s" if qty != 1 else ""} {items_by_id[can_id]["name"]}')
+    item_text = ", ".join(pieces[:4])
+    if len(pieces) > 4:
+        item_text += f", plus {len(pieces) - 4} more"
+    prevented = plan.get("prevents_unassigned", 0)
+    if prevented > 0:
+        comparison = (
+            f"dropping would leave {prevented} more needed item"
+            f"{'s' if prevented != 1 else ''} without an active broadliner"
+        )
+    elif savings_vs_drop >= 0:
+        comparison = f"estimated {fmt_money(savings_vs_drop)} cheaper than dropping/reassigning"
+    else:
+        comparison = (
+            f"estimated {fmt_money(abs(savings_vs_drop))} more than dropping, "
+            f"but filler spend is under {fmt_money(LOW_FILLER_SPEND_LIMIT)} and uses safe stock"
+        )
+    return (
+        f"{VENDOR_NAMES[vid]} kept by adding {plan['filler_count']} minimum filler case"
+        f"{'s' if plan['filler_count'] != 1 else ''} ({fmt_money(plan['filler_spend'])}: {item_text}) "
+        f"to meet {minimum_label(vid)}; {comparison}."
+    )
 
 def optimize_basket(canonical_items, best_prices):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
     active = set(BROADLINER_IDS)
     notes  = []
     dropped = set()
+    filler_cases = {}
+    assignment = {}
 
-    for _ in range(10):
-        assignment = {}
-        for ci in canonical_items:
-            if ci["order_qty"] <= 0:
-                continue
-            opts = {
-                v: best_prices[ci["id"]][v]
-                for v in active
-                if ci["id"] in best_prices and v in best_prices[ci["id"]]
-            }
-            if opts:
-                assignment[ci["id"]] = min(opts, key=lambda v: opts[v]["price"])
+    for _ in range(20):
+        filler_cases = filter_filler_cases(filler_cases, active)
+        assignment = assign_cheapest(canonical_items, best_prices, active)
 
-        _, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices)
+        _, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices, filler_cases)
 
         failing = {
             v for v in active
@@ -250,24 +449,55 @@ def optimize_basket(canonical_items, best_prices):
         if not failing:
             break
 
-        for vid in sorted(failing, key=lambda v: vendor_spend.get(v, 0)):
-            cases = vendor_cases.get(vid, 0)
-            spend = vendor_spend.get(vid, 0.0)
-            min_type, min_val = MINIMUMS[vid]
-            shortfall = (f"${spend:,.0f}/${min_val:,.0f}"
-                         if min_type == "dollars"
-                         else f"{cases}/{min_val} cases")
-            notes.append(
-                f"{VENDOR_NAMES[vid]} dropped — minimum not met ({shortfall}). "
-                "Items reassigned to next cheapest vendor."
+        vid = sorted(failing, key=lambda v: vendor_spend.get(v, 0))[0]
+        cases = vendor_cases.get(vid, 0)
+        spend = vendor_spend.get(vid, 0.0)
+        min_type, min_val = MINIMUMS[vid]
+        shortfall = (f"${spend:,.0f}/${min_val:,.0f}"
+                     if min_type == "dollars"
+                     else f"{cases}/{min_val} cases")
+
+        plan = build_rescue_fillers(vid, canonical_items, best_prices, assignment, filler_cases)
+        should_keep = False
+        savings_vs_drop = 0.0
+        if plan:
+            rescue_fillers = dict(filler_cases)
+            for key, qty in plan["added"].items():
+                rescue_fillers[key] = rescue_fillers.get(key, 0) + qty
+
+            drop_assignment, drop_active, drop_dropped = settle_by_dropping(
+                canonical_items, best_prices, active - {vid}, filler_cases
             )
-            active.discard(vid)
-            dropped.add(vid)
+            drop_fillers = filter_filler_cases(filler_cases, drop_active)
+            rescue_total = basket_total(assignment, items_by_id, best_prices, rescue_fillers)
+            drop_total = basket_total(drop_assignment, items_by_id, best_prices, drop_fillers)
+            savings_vs_drop = round(drop_total - rescue_total, 2)
+            drop_unassigned = count_unassigned(canonical_items, drop_assignment)
+            current_unassigned = count_unassigned(canonical_items, assignment)
+            plan["prevents_unassigned"] = max(0, drop_unassigned - current_unassigned)
+            should_keep = (
+                savings_vs_drop >= MIN_RESCUE_SAVINGS
+                or plan["filler_spend"] <= LOW_FILLER_SPEND_LIMIT
+                or plan["prevents_unassigned"] > 0
+            )
+
+        if should_keep:
+            for key, qty in plan["added"].items():
+                filler_cases[key] = filler_cases.get(key, 0) + qty
+            notes.append(rescue_note(vid, plan, savings_vs_drop, items_by_id))
+            continue
+
+        notes.append(
+            f"{VENDOR_NAMES[vid]} dropped — minimum not met ({shortfall}). "
+            "Dropping/reassigning was cheaper than adding safe minimum filler."
+        )
+        active.discard(vid)
+        dropped.add(vid)
 
     unassigned = [ci for ci in canonical_items
                   if ci["order_qty"] > 0 and ci["id"] not in assignment]
 
-    return assignment, dropped, unassigned, notes
+    return assignment, dropped, unassigned, notes, filler_cases
 
 def compute_savings(assignment, canonical_items, best_prices):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
@@ -372,9 +602,12 @@ def vendor_pill(vid):
     return _pill(VENDOR_ABBR.get(vid, str(vid)), l, d)
 
 def build_html(assignment, dropped, unassigned, notes,
-               canonical_items, best_prices, savings_rows, total_saved):
+               canonical_items, best_prices, savings_rows, total_saved,
+               filler_cases=None):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
-    vendor_items, vendor_cases, vendor_spend = calc_totals(assignment, items_by_id, best_prices)
+    vendor_items, vendor_cases, vendor_spend = calc_totals(
+        assignment, items_by_id, best_prices, filler_cases or {}
+    )
 
     # ── Build per-vendor order payload for "Place Orders" button ─────────────
     _order_data = {}
@@ -405,6 +638,7 @@ def build_html(assignment, dropped, unassigned, notes,
     time_str   = now.strftime("%I:%M %p")
     grand      = sum(vendor_spend.values())
     total_cases = sum(vendor_cases.values())
+    total_filler_cases = sum(filler_cases.values()) if filler_cases else 0
 
     def sorted_by_cat(entries):
         cat_map = defaultdict(list)
@@ -427,7 +661,7 @@ def build_html(assignment, dropped, unassigned, notes,
   </div>
   <div style="display:flex;align-items:center;gap:18px">
     <div style="text-align:right;font-size:.85rem;opacity:.8">
-      {len(assignment)} items &nbsp;|&nbsp; {total_cases} cases &nbsp;|&nbsp;
+      {sum(len(v) for v in vendor_items.values())} items &nbsp;|&nbsp; {total_cases} cases &nbsp;|&nbsp;
       <strong style="font-size:1.1rem;opacity:1">{fmt_money(grand)}</strong>
     </div>
     <button class="order-btn" onclick="openOrderModal()">📦 Place Orders</button>
@@ -455,6 +689,12 @@ def build_html(assignment, dropped, unassigned, notes,
                  f'<span>Savings vs Worst</span>'
                  f'<strong style="color:#198754">{fmt_money(total_saved)}</strong>'
                  f'<span>vs always buying highest price</span></div>')
+
+    if total_filler_cases:
+        h.append(f'<div class="stat" style="text-align:right">'
+                 f'<span>Minimum Filler</span>'
+                 f'<strong style="color:#856404">{total_filler_cases} cases</strong>'
+                 f'<span>safe stock added to meet minimums</span></div>')
 
     h.append('</div>\n<div class="content">\n')
 
@@ -491,10 +731,21 @@ def build_html(assignment, dropped, unassigned, notes,
             h.append(f'<tr class="cat-header"><td colspan="6">{cat_name}</td></tr>')
             for e in grp:
                 item = e["item"]
-                h.append(f'<tr><td class="item-name">{item["name"]}</td>'
+                filler_qty = e.get("filler_cases", 0)
+                filler_badge = (
+                    f' <span class="badge badge-warn">Minimum filler'
+                    f'{": +" + str(filler_qty) if e.get("base_cases", 0) else ""}</span>'
+                    if filler_qty else ""
+                )
+                cases_text = (
+                    f'{e["cases"]} <span style="color:var(--muted);font-size:.72rem">'
+                    f'({e.get("base_cases", 0)} base + {filler_qty} filler)</span>'
+                    if filler_qty and e.get("base_cases", 0) else str(e["cases"])
+                )
+                h.append(f'<tr><td class="item-name">{item["name"]}{filler_badge}</td>'
                          f'<td class="pack">{item["pack_size"]}</td>'
                          f'<td class="apn c">{e["apn"] or "—"}</td>'
-                         f'<td class="c">{e["cases"]}</td>'
+                         f'<td class="c">{cases_text}</td>'
                          f'<td class="r">{fmt_money(e["price"])}</td>'
                          f'<td class="sub r">{fmt_money(e["subtotal"])}</td></tr>')
 
@@ -704,12 +955,13 @@ class handler(BaseHTTPRequestHandler):
         try:
             canonical_items, best_prices = load_data(on_hand)
             save_inventory_snapshot(on_hand, canonical_items)   # persist count for food cost
-            assignment, dropped, unassigned, notes = optimize_basket(canonical_items, best_prices)
+            assignment, dropped, unassigned, notes, filler_cases = optimize_basket(canonical_items, best_prices)
             savings_rows, total_saved = compute_savings(assignment, canonical_items, best_prices)
             html = build_html(
                 assignment, dropped, unassigned, notes,
                 canonical_items, best_prices,
                 savings_rows, total_saved,
+                filler_cases,
             )
         except Exception as e:
             import traceback
