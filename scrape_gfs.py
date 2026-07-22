@@ -219,6 +219,15 @@ def _word_overlap(a, b):
     return len(shorter & longer) / len(shorter)
 
 
+def _tokens(text):
+    stop = {"", "the", "a", "an", "and", "of", "in", "ss", "w", "s"}
+    return {
+        _stem(t)
+        for t in re.split(r"\W+", (text or "").lower())
+        if not re.fullmatch(r"[\d]+", t)
+    } - stop
+
+
 def match_item(name, apn, item_map):
     """Match a GFS material to a Supabase item_id by APN then by name."""
     if apn and apn.upper() in item_map["by_apn"]:
@@ -234,7 +243,14 @@ def match_item(name, apn, item_map):
         score = _word_overlap(n, k)
         if score > best_score:
             best_score, best_id = score, v
-    return best_id if best_score >= 0.7 else None
+    if best_score < 0.7:
+        return None
+    # Avoid matching produce sold under "Packer Label ..." to the paper item "Labels".
+    if _tokens(n) - _tokens("label labels"):
+        best_name = next((k for k, v in item_map["by_name"].items() if v == best_id), "")
+        if _tokens(best_name) <= _tokens("label labels"):
+            return None
+    return best_id
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -344,6 +360,7 @@ def main():
                 "price_list_id": pl_id,
                 "apn":           mat_num,
                 "price":         pr["price"],
+                "vendor_item_name": name,
             }, "item_id,vendor_id,price_list_id")
             matched += 1
         else:

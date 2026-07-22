@@ -975,6 +975,7 @@ def main():
                 "price_list_id": pl_id,
                 "apn":           pid,
                 "price":         price,
+                "vendor_item_name": name,
             }, "item_id,vendor_id,price_list_id")
             matched += 1
         else:

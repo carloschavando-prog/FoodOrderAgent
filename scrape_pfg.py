@@ -445,6 +445,7 @@ def main():
                 "price_list_id": pl_id,
                 "apn":           r["product_number"],
                 "price":         r["price"],
+                "vendor_item_name": r["name"],
             }, "item_id,vendor_id,price_list_id")
             matched += 1
         else:
