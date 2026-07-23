@@ -84,12 +84,25 @@ def load_item_map():
     rows  = sb_get("items?select=id,name")
     by_name = {r["name"].lower().strip(): r["id"] for r in rows}
     by_apn  = {}
+    normalization_by_apn = {}
     rows2 = sb_get(
-        f"pricing?select=item_id,apn&vendor_id=eq.{VENDOR_ID}&apn=not.is.null")
+        "pricing?select=item_id,apn,unit_basis,unit_quantity,unit_note"
+        f"&vendor_id=eq.{VENDOR_ID}&apn=not.is.null&order=price_list_id.desc")
     for r in rows2:
         if r.get("apn"):
-            by_apn[str(r["apn"]).upper()] = r["item_id"]
-    return {"by_name": by_name, "by_apn": by_apn}
+            apn = str(r["apn"]).upper()
+            by_apn.setdefault(apn, r["item_id"])
+            if r.get("unit_basis") and r.get("unit_quantity"):
+                normalization_by_apn.setdefault(apn, {
+                    "unit_basis": r["unit_basis"],
+                    "unit_quantity": float(r["unit_quantity"]),
+                    "unit_note": r.get("unit_note"),
+                })
+    return {
+        "by_name": by_name,
+        "by_apn": by_apn,
+        "normalization_by_apn": normalization_by_apn,
+    }
 
 def _stem(word):
     w = word.lower()
@@ -440,17 +453,30 @@ def main():
 
     matched, unmatched = 0, []
     for r in rows:
-        item_id = match_item(r["name"], r["product_number"], item_map)
+        apn = str(r["product_number"]).upper()
+        item_id = match_item(r["name"], apn, item_map)
         if item_id:
-            sb_upsert("pricing", {
+            payload = {
                 "item_id":       item_id,
                 "vendor_id":     VENDOR_ID,
                 "price_list_id": pl_id,
-                "apn":           r["product_number"],
+                "apn":           apn,
                 "price":         r["price"],
                 "pack_size":     r["pack_size"],
                 "vendor_item_name": r["name"],
-            }, "item_id,vendor_id,price_list_id")
+            }
+            normalization = item_map["normalization_by_apn"].get(apn)
+            if normalization:
+                quantity = normalization["unit_quantity"]
+                payload.update({
+                    **normalization,
+                    "unit_price": round(r["price"] / quantity, 4),
+                })
+            sb_upsert(
+                "pricing",
+                payload,
+                "item_id,vendor_id,price_list_id",
+            )
             matched += 1
         else:
             unmatched.append(f"{r['name'][:45]}  #{r['product_number']}")

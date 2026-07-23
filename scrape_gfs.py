@@ -191,11 +191,27 @@ def load_item_map():
     rows    = sb_get("items?select=id,name")
     by_name = {r["name"].lower().strip(): r["id"] for r in rows}
     by_apn  = {}
-    rows2   = sb_get(f"pricing?select=item_id,apn&vendor_id=eq.{VENDOR_ID}&apn=not.is.null")
+    normalization_by_apn = {}
+    rows2 = sb_get(
+        "pricing?select=item_id,apn,pack_size,unit_basis,unit_quantity,unit_note"
+        f"&vendor_id=eq.{VENDOR_ID}&apn=not.is.null&order=price_list_id.desc"
+    )
     for r in rows2:
         if r.get("apn"):
-            by_apn[str(r["apn"]).upper()] = r["item_id"]
-    return {"by_name": by_name, "by_apn": by_apn}
+            apn = str(r["apn"]).upper()
+            by_apn.setdefault(apn, r["item_id"])
+            if r.get("unit_basis") and r.get("unit_quantity"):
+                normalization_by_apn.setdefault(apn, {
+                    "pack_size": r.get("pack_size"),
+                    "unit_basis": r["unit_basis"],
+                    "unit_quantity": float(r["unit_quantity"]),
+                    "unit_note": r.get("unit_note"),
+                })
+    return {
+        "by_name": by_name,
+        "by_apn": by_apn,
+        "normalization_by_apn": normalization_by_apn,
+    }
 
 
 def _stem(word):
@@ -349,19 +365,32 @@ def main():
     # 7. Match and upsert
     print("\n→ Matching materials to item master and upserting...")
     matched, unmatched = 0, []
-    for mat_num, pr in price_map.items():
-        info    = info_map.get(mat_num, {})
+    for raw_mat_num, pr in price_map.items():
+        info    = info_map.get(raw_mat_num, {})
+        mat_num = str(raw_mat_num).upper()
         name    = info.get("name", mat_num)
         item_id = match_item(name, mat_num, item_map)
         if item_id:
-            sb_upsert("pricing", {
+            payload = {
                 "item_id":       item_id,
                 "vendor_id":     VENDOR_ID,
                 "price_list_id": pl_id,
                 "apn":           mat_num,
                 "price":         pr["price"],
                 "vendor_item_name": name,
-            }, "item_id,vendor_id,price_list_id")
+            }
+            normalization = item_map["normalization_by_apn"].get(mat_num)
+            if normalization:
+                quantity = normalization["unit_quantity"]
+                payload.update({
+                    **normalization,
+                    "unit_price": round(pr["price"] / quantity, 4),
+                })
+            sb_upsert(
+                "pricing",
+                payload,
+                "item_id,vendor_id,price_list_id",
+            )
             matched += 1
         else:
             unmatched.append(f"{mat_num}  {name[:45]}  ${pr['price']:.2f}")

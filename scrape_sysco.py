@@ -753,10 +753,27 @@ def load_item_map():
     by_name = {r["name"].lower().strip(): r["id"] for r in rows}
     # existing Sysco APNs (productIds) already matched in pricing table
     rows2 = sb_get(
-        f"pricing?select=item_id,apn&vendor_id=eq.{VENDOR_ID}&apn=not.is.null"
+        "pricing?select=item_id,apn,pack_size,unit_basis,unit_quantity,unit_note"
+        f"&vendor_id=eq.{VENDOR_ID}&apn=not.is.null&order=price_list_id.desc"
     )
-    by_apn = {str(r["apn"]).upper(): r["item_id"] for r in rows2 if r.get("apn")}
-    return {"by_name": by_name, "by_apn": by_apn}
+    by_apn = {}
+    normalization_by_apn = {}
+    for r in rows2:
+        if r.get("apn"):
+            apn = str(r["apn"]).upper()
+            by_apn.setdefault(apn, r["item_id"])
+            if r.get("unit_basis") and r.get("unit_quantity"):
+                normalization_by_apn.setdefault(apn, {
+                    "pack_size": r.get("pack_size"),
+                    "unit_basis": r["unit_basis"],
+                    "unit_quantity": float(r["unit_quantity"]),
+                    "unit_note": r.get("unit_note"),
+                })
+    return {
+        "by_name": by_name,
+        "by_apn": by_apn,
+        "normalization_by_apn": normalization_by_apn,
+    }
 
 
 _BRAND_PREFIXES = re.compile(
@@ -961,22 +978,35 @@ def main():
     print("\n→ Matching products to item master and upserting ...")
     matched, unmatched = 0, []
     for prod in products:
-        pid   = prod["productId"]
+        raw_pid = prod["productId"]
+        pid   = str(raw_pid).upper()
         name  = prod["name"]
-        price = price_map.get(pid)
+        price = price_map.get(raw_pid)
         if price is None:
             unmatched.append(f"{pid}  {name[:45]}  (no price)")
             continue
         item_id = match_item(name, pid, item_map)
         if item_id:
-            sb_upsert("pricing", {
+            payload = {
                 "item_id":       item_id,
                 "vendor_id":     VENDOR_ID,
                 "price_list_id": pl_id,
                 "apn":           pid,
                 "price":         price,
                 "vendor_item_name": name,
-            }, "item_id,vendor_id,price_list_id")
+            }
+            normalization = item_map["normalization_by_apn"].get(pid)
+            if normalization:
+                quantity = normalization["unit_quantity"]
+                payload.update({
+                    **normalization,
+                    "unit_price": round(price / quantity, 4),
+                })
+            sb_upsert(
+                "pricing",
+                payload,
+                "item_id,vendor_id,price_list_id",
+            )
             matched += 1
         else:
             unmatched.append(f"{pid}  {name[:45]}  ${price:.2f}")
