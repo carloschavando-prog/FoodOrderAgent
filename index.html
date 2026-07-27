@@ -169,7 +169,11 @@
     .card-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end}
     .field{display:flex;flex-direction:column;gap:3px}
     .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0;color:#65797d}
-    .field-static{font-size:20px;font-weight:700;color:#4c666b;line-height:1.1}
+    .field-static{
+      display:flex;align-items:baseline;gap:4px;white-space:nowrap;
+      font-size:20px;font-weight:700;color:#4c666b;line-height:1.1;
+    }
+    .field-unit{font-size:11px;font-weight:700;color:#65797d}
     .order-qty{font-size:20px;font-weight:700;line-height:1.1}
     .order-qty.positive{color:var(--red)}
     .order-qty.zero{color:var(--green)}
@@ -184,12 +188,6 @@
     .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     .field input[type=number]:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(7,63,73,.12)}
     .item-card.needs-order .field input[type=number]{border-color:#c4aa35}
-    .card-footer{
-      margin-top:8px;padding-top:7px;border-top:1px solid rgba(100,118,122,.22);
-      font-size:10px;font-weight:700;color:var(--muted);
-      display:flex;justify-content:space-between;
-    }
-
     /* ── Vendor panel ── */
     .overlay{display:none;position:fixed;inset:0;background:rgba(22,43,48,.42);z-index:100}
     .overlay.open{display:block}
@@ -220,7 +218,6 @@
     .vendor-row:last-child{border-bottom:none}
     .v-name{flex:1}
     .v-qty{font-weight:700;color:var(--red);margin-left:12px;font-size:15px;min-width:24px;text-align:right}
-    .v-price{color:var(--muted);font-size:11px;margin-left:8px;min-width:50px;text-align:right}
     .no-orders{padding:32px 20px;color:var(--muted);font-size:13px;text-align:center;line-height:1.6}
 
     /* ── Print ── */
@@ -235,8 +232,9 @@
       .item-card.needs-order{border-color:#c00;background:#fff5f5}
       body,.item-name,.vendor-tag{background:white;color:#111}
       .vendor-tag{background:#eee;color:#555;border-color:#ddd}
-      .field-label,.card-footer{color:#666}
+      .field-label{color:#666}
       .field-static{color:#333}
+      .field-unit{color:#555}
       .order-qty.positive{color:#c00}
       .order-qty.zero{color:#090}
       .field input[type=number]{background:#f5f5f5;border-color:#ccc;color:#111}
@@ -504,6 +502,11 @@ function calcOrder(buildTo, raw){
   return Math.max(0, Math.ceil(buildTo - parseFloat(raw)));
 }
 
+function countUnitLabel(item){
+  const unit=item.countUnit || 'case';
+  return item.buildTo===1 || unit!=='case' ? unit : 'cases';
+}
+
 // ── Render sidebar ──────────────────────────────────────
 function renderSidebar(){
   document.getElementById('sidebar').innerHTML =
@@ -543,7 +546,9 @@ function renderCard(item){
       <div class="card-fields">
         <div class="field">
           <div class="field-label">PAR</div>
-          <div class="field-static">${item.buildTo}</div>
+          <div class="field-static">
+            ${item.buildTo}<span class="field-unit">${countUnitLabel(item)}</span>
+          </div>
         </div>
         <div class="field">
           <div class="field-label">On Hand</div>
@@ -558,9 +563,6 @@ function renderCard(item){
           <div class="order-qty ${orderCls}" id="oq-${item.id}">${orderText}</div>
         </div>
       </div>
-      ${item.price?`<div class="card-footer">
-        <span>$${item.price.toFixed(2)}</span>
-      </div>`:''}
     </div>`;
 }
 
@@ -784,7 +786,6 @@ function buildVendorPanel(){
         <div class="vendor-row">
           <span class="v-name">${item.name}</span>
           <span class="v-qty">${item.orderQty}</span>
-          ${item.price?`<span class="v-price">$${item.price.toFixed(2)}</span>`:'<span class="v-price"></span>'}
         </div>`).join('')}
     </div>`).join('');
 }
