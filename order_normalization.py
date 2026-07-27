@@ -8,6 +8,7 @@ DRY_STOCK_CATEGORY_ID = 4
 DISPOSABLES_CATEGORY_ID = 5
 
 ITEM_COUNT_UNITS = {
+    "double lobe chicken breasts": "20-pound case",
     "ranch dressing": "gallon",
 }
 
@@ -197,6 +198,13 @@ def units_per_case(item, pricing):
             return quantity / 5.0
         if basis == "oz":
             return quantity / (5.0 * OUNCES_PER_POUND)
+        return None
+
+    if count_unit == "20-pound case":
+        if basis == "lb":
+            return quantity / 20.0
+        if basis == "oz":
+            return quantity / (20.0 * OUNCES_PER_POUND)
         return None
 
     if count_unit == "1/2-gallon jar":

@@ -63,6 +63,14 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 6,
                 "preferred_vendor_id": 1,
             },
+            {
+                "id": 19,
+                "name": "Double Lobe Chicken Breasts",
+                "category_id": 6,
+                "pack_size": "4/5 LB",
+                "par_level": 8,
+                "preferred_vendor_id": 1,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -112,6 +120,12 @@ class TruckParTests(unittest.TestCase):
 
         self.assertEqual(items['tortilla, flour 12"']["par_level"], 2)
         self.assertEqual(items['tortilla, flour 6"']["par_level"], 1)
+
+    def test_tuesday_truck_uses_four_case_double_lobe_par(self):
+        chicken = self.load_items("tuesday")["double lobe chicken breasts"]
+
+        self.assertEqual(chicken["par_level"], 4)
+        self.assertEqual(chicken["order_qty"], 4)
 
 
 if __name__ == "__main__":
