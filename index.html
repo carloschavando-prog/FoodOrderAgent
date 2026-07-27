@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kitchen Order Sheet</title>
+  <title>Kitchen Inventory Sheet</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
@@ -284,7 +284,7 @@
     <div class="brand-mark" aria-hidden="true">OPE</div>
     <div class="brand-copy">
       <div class="brand-kicker">On Par Entertainment</div>
-      <h1>Kitchen Order Sheet <span id="dateLabel"></span></h1>
+      <h1>Kitchen Inventory Sheet <span id="dateLabel"></span></h1>
     </div>
   </div>
   <div class="header-actions">
@@ -674,7 +674,7 @@ async function saveSharedSnapshot(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        notes:'Saved from Kitchen Order Sheet',
+        notes:'Saved from Kitchen Inventory Sheet',
         items:rows,
       }),
     });
