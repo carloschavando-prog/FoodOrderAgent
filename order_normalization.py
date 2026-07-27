@@ -8,6 +8,7 @@ DRY_STOCK_CATEGORY_ID = 4
 DISPOSABLES_CATEGORY_ID = 5
 
 ITEM_COUNT_UNITS = {
+    "american slices 120 ct": "5-pound pack",
     "double lobe chicken breasts": "20-pound case",
     "ranch dressing": "gallon",
 }
@@ -131,6 +132,21 @@ def _inner_pack_count(pricing):
     return float(match.group(1)) if match else None
 
 
+def _five_pound_pack_count(pricing):
+    text = " ".join(
+        str(pricing.get(field) or "")
+        for field in ("pack_size", "unit_note")
+    )
+    for pattern in (
+        r"(\d+(?:\.\d+)?)\s*packs?\b",
+        r"(\d+(?:\.\d+)?)\s*(?:/|x)\s*5\s*(?:lb|#)\b",
+    ):
+        match = re.search(pattern, text, re.I)
+        if match:
+            return float(match.group(1))
+    return None
+
+
 def _rolls_per_case(item, pricing):
     expected_feet = {
         "plastic wrap": 2000.0,
@@ -193,7 +209,12 @@ def units_per_case(item, pricing):
             return quantity / (10.0 * OUNCES_PER_LITER)
         return None
 
-    if count_unit == "5-pound bag":
+    if count_unit == "5-pound pack":
+        pack_count = _five_pound_pack_count(pricing)
+        if pack_count:
+            return pack_count
+
+    if count_unit in {"5-pound bag", "5-pound pack"}:
         if basis == "lb":
             return quantity / 5.0
         if basis == "oz":

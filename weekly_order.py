@@ -835,6 +835,7 @@ def fmt_count_unit(unit, qty):
     return {
         "10-liter box": "10-liter boxes",
         "5-pound bag": "5-pound bags",
+        "5-pound pack": "5-pound packs",
         "1/2-gallon jar": "1/2-gallon jars",
         "#10 can": "#10 cans",
         "bag": "bags",
