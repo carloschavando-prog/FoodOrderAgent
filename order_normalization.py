@@ -10,6 +10,8 @@ DISPOSABLES_CATEGORY_ID = 5
 ITEM_COUNT_UNITS = {
     "american slices 120 ct": "5-pound pack",
     "double lobe chicken breasts": "20-pound case",
+    "parmesan cheese": "5-pound bag",
+    "pecorino romano blend": "5-pound bag",
     "ranch dressing": "gallon",
 }
 
