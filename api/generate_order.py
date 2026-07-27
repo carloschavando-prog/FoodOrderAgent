@@ -243,7 +243,9 @@ def load_data(on_hand, truck_cycle="friday"):
         elif oh is not None:
             qty = max(0.0, math.ceil(par - float(oh)))
         else:
-            qty = par  # uncounted → full par
+            # The kitchen inventory sheet is authoritative. Database-only items
+            # must not silently become orders when the staff could not count them.
+            qty = 0.0
 
         canonical_items.append({
             "id":            can_id,
