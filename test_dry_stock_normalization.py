@@ -37,6 +37,17 @@ class DryStockNormalizationTests(unittest.TestCase):
         self.assertEqual(pricing["units_per_case"], 2)
         self.assertEqual(cases_required(row, pricing), 6)
 
+    def test_ranch_dressing_shortage_converts_gallons_to_cases(self):
+        row = item("Ranch Dressing", 8)
+        row["category_id"] = 6
+        row["count_unit"] = count_unit_for_item(row)
+        pricing = price(43.45, 512)
+        pricing["units_per_case"] = units_per_case(row, pricing)
+
+        self.assertEqual(row["count_unit"], "gallon")
+        self.assertEqual(pricing["units_per_case"], 4)
+        self.assertEqual(cases_required(row, pricing), 2)
+
     def test_vendor_selection_uses_extended_cost_for_each_pack(self):
         row = item("Garlic Parmesan", 5)
         two_gallon_case = price(30, 256)

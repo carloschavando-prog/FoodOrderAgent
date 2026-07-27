@@ -7,6 +7,10 @@ import re
 DRY_STOCK_CATEGORY_ID = 4
 DISPOSABLES_CATEGORY_ID = 5
 
+ITEM_COUNT_UNITS = {
+    "ranch dressing": "gallon",
+}
+
 DRY_STOCK_COUNT_UNITS = {
     "garlic parmesan": "gallon",
     "yellow mustard": "gallon",
@@ -57,6 +61,8 @@ OUNCES_PER_POUND = 16.0
 def count_unit_for_item(item):
     """Return the inventory counting unit for normalized categories."""
     name = item["name"].lower().strip()
+    if name in ITEM_COUNT_UNITS:
+        return ITEM_COUNT_UNITS[name]
     if item.get("category_id") == DRY_STOCK_CATEGORY_ID:
         return DRY_STOCK_COUNT_UNITS.get(name, "case")
     if item.get("category_id") == DISPOSABLES_CATEGORY_ID:
