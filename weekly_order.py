@@ -96,6 +96,7 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "cucumbers",
     "fajita chicken",
     "jtm taco meat",
+    "mild cheddar cheese",
     "sour cream",
     "tater kegs",
     "tater tots",
