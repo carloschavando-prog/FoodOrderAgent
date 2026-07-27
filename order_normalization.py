@@ -67,7 +67,7 @@ def count_unit_for_item(item):
 def pricing_matches_item_requirements(item, pricing):
     """Enforce product traits that are mandatory regardless of vendor price."""
     name = item["name"].lower().strip()
-    if name != "styrofoam to-go containers":
+    if name not in {"styrofoam to-go containers", "2 oz to-go cups"}:
         return True
     description = " ".join(
         str(pricing.get(field) or "").lower()

@@ -15,6 +15,14 @@ ITEM = {
     "count_unit": "case",
 }
 
+CUP_ITEM = {
+    "id": 45,
+    "name": "2 oz To-Go Cups",
+    "category_id": 5,
+    "order_qty": 2,
+    "count_unit": "case",
+}
+
 
 class BlackFoamContainerTests(unittest.TestCase):
     def test_generator_accepts_black_container(self):
@@ -81,6 +89,27 @@ class BlackFoamContainerTests(unittest.TestCase):
             generate_order.assign_cheapest([ITEM], pricing, {1}),
             {41: 1},
         )
+
+    def test_generator_requires_black_two_ounce_cups(self):
+        self.assertTrue(pricing_matches_item_requirements(
+            CUP_ITEM,
+            {"vendor_item_name": "Cup Souffle Polystyrene 2 Oz Black"},
+        ))
+        self.assertFalse(pricing_matches_item_requirements(
+            CUP_ITEM,
+            {"vendor_item_name": "Cup Plastic Portion Translucent 2 Ounce"},
+        ))
+
+    def test_usfoods_scraper_does_not_fuzzy_match_clear_cup(self):
+        item_map = {
+            "by_apn": {"2961092": 45},
+            "by_name": {"2 oz to-go cups": 45},
+        }
+        clear = "Cup, Souffle 2 Oz Polypropylene Plastic Portion"
+        black = "Cup, Souffle Polystyrene 2 Oz Black Portion Plastic"
+
+        self.assertIsNone(match_item(clear, "1054255", item_map))
+        self.assertEqual(match_item(black, "2961092", item_map), 45)
 
 
 if __name__ == "__main__":

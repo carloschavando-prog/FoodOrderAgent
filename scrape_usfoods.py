@@ -118,7 +118,7 @@ def _compatible_product(item_name, product_name):
     """Reject catalog products that violate required item traits."""
     item_key = (item_name or "").lower().strip()
     product_key = (product_name or "").lower()
-    if item_key == "styrofoam to-go containers":
+    if item_key in {"styrofoam to-go containers", "2 oz to-go cups"}:
         return "black" in product_key and "white" not in product_key
     return True
 
