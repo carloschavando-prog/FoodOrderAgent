@@ -7,38 +7,60 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;
-      --text:#e6edf3;--muted:#7d8590;--accent:#58a6ff;
-      --green:#3fb950;--red:#f85149;--orange:#d29922;
-      --red-bg:rgba(248,81,73,0.08);--green-bg:rgba(63,185,80,0.08);
+      --bg:#f5f3ec;--surface:#ffffff;--surface2:#edf6f6;--border:#c9d8d7;
+      --text:#162b30;--muted:#64767a;--accent:#073f49;
+      --green:#2f745d;--red:#a44737;--orange:#947b1f;
+      --red-bg:#fae5df;--green-bg:#dcefe1;--teal-soft:#dceff1;
+      --yellow-soft:#fff0ae;--yellow-border:#cba92b;--lavender-soft:#ead8ee;
+      --shadow:0 8px 24px rgba(22,43,48,.08);
     }
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    body{
+      font-family:Inter,"Avenir Next","Segoe UI",Arial,sans-serif;
+      background:var(--bg);color:var(--text);min-height:100vh;
+    }
 
     /* ── Header ── */
     .app-header{
       position:sticky;top:0;z-index:50;
       background:var(--surface);border-bottom:1px solid var(--border);
-      padding:0 24px;height:58px;
-      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:11px 24px;min-height:72px;
+      display:flex;align-items:center;justify-content:space-between;gap:20px;
+      box-shadow:0 2px 12px rgba(22,43,48,.05);
     }
-    .app-header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap}
-    .app-header h1 span{color:var(--muted);font-weight:400;font-size:13px}
-    .header-actions{display:flex;gap:8px;flex-shrink:0}
+    .brand-lockup{display:flex;align-items:center;gap:12px;min-width:250px}
+    .brand-mark{
+      width:44px;height:44px;border-radius:4px;background:var(--accent);color:#fff;
+      display:grid;place-items:center;font-family:Georgia,"Times New Roman",serif;
+      font-size:15px;font-weight:700;line-height:1;flex:0 0 auto;
+    }
+    .brand-copy{min-width:0}
+    .brand-kicker{
+      color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;
+      letter-spacing:0;line-height:1.2;margin-bottom:3px;
+    }
+    .app-header h1{
+      font-family:Georgia,"Times New Roman",serif;font-size:21px;font-weight:500;
+      line-height:1.15;display:flex;align-items:baseline;gap:9px;white-space:nowrap;
+    }
+    .app-header h1 span{
+      color:var(--muted);font-family:Inter,"Avenir Next","Segoe UI",Arial,sans-serif;
+      font-weight:500;font-size:11px;
+    }
+    .header-actions{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
     .btn{
-      height:32px;padding:0 14px;border-radius:6px;
-      border:1px solid var(--border);background:var(--surface2);
-      color:var(--text);font-size:13px;font-weight:500;
+      min-height:34px;padding:0 14px;border-radius:999px;
+      border:1px solid var(--accent);background:var(--surface);
+      color:var(--accent);font-size:12px;font-weight:700;
       cursor:pointer;display:inline-flex;align-items:center;gap:6px;
-      transition:all .15s;white-space:nowrap;
+      transition:background .15s,color .15s,border-color .15s;white-space:nowrap;
     }
-    .btn:hover{background:var(--border);border-color:var(--muted)}
-    .btn-primary{background:var(--accent);border-color:var(--accent);color:#0d1117;font-weight:700}
-    .btn-primary:hover{opacity:.88;background:var(--accent)}
-    .btn-danger{background:rgba(248,81,73,.15);border-color:rgba(248,81,73,.3);color:var(--red)}
-    .btn-danger:hover{background:rgba(248,81,73,.25)}
-    .btn-success{background:#238636;border-color:#2ea043;color:#fff;font-weight:700}
-    .btn-success:hover{background:#2ea043}
+    .btn:hover{background:var(--teal-soft);border-color:var(--accent)}
+    .btn-primary,.btn-success{background:var(--accent);border-color:var(--accent);color:#fff}
+    .btn-primary:hover,.btn-success:hover{background:#0d5662;border-color:#0d5662}
+    .btn-danger{background:var(--surface);border-color:#d5a9a0;color:var(--red)}
+    .btn-danger:hover{background:var(--red-bg);border-color:var(--red)}
     .btn-success:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+    .btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
     /* ── Generate order spinner ── */
     .spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);
       border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
@@ -46,74 +68,80 @@
     /* ── Toast ── */
     .toast{
       position:fixed;bottom:24px;right:24px;z-index:200;
-      background:#238636;color:#fff;padding:12px 20px;border-radius:8px;
-      font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.4);
+      background:var(--accent);color:#fff;padding:12px 20px;border-radius:8px;
+      font-size:13px;font-weight:700;box-shadow:var(--shadow);
       display:none;align-items:center;gap:10px;
     }
     .toast.show{display:flex}
-    .toast.error{background:#b91c1c}
+    .toast.error{background:var(--red)}
 
     /* ── Stats bar ── */
     .stats-bar{
-      background:var(--surface2);border-bottom:1px solid var(--border);
-      padding:9px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+      position:sticky;top:72px;z-index:40;background:var(--teal-soft);
+      border-bottom:1px solid #bdd4d6;
+      padding:9px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
     }
-    .stat{display:flex;align-items:center;gap:6px;font-size:13px}
-    .stat-label{color:var(--muted)}
+    .stat{display:flex;align-items:center;gap:7px;font-size:12px}
+    .stat-label{color:#496469;font-weight:600}
     .stat-value{font-weight:700}
     .stat-value.red{color:var(--red)}
     .stat-value.green{color:var(--green)}
     .pill{
       display:inline-flex;align-items:center;gap:4px;
-      padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;
+      padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;
     }
-    .pill-red{background:var(--red-bg);color:var(--red);border:1px solid rgba(248,81,73,.2)}
-    .pill-muted{background:var(--surface);color:var(--muted);border:1px solid var(--border)}
+    .pill-red{background:var(--yellow-soft);color:#765f09;border:1px solid #dec653}
+    .pill-muted{background:rgba(255,255,255,.7);color:var(--muted);border:1px solid #bdd4d6}
     .vendor-pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 
     /* ── Layout ── */
-    .layout{display:flex}
+    .layout{display:flex;min-height:calc(100vh - 116px)}
 
     /* ── Sidebar ── */
     .sidebar{
-      width:196px;flex-shrink:0;
+      width:210px;flex-shrink:0;
       background:var(--surface);border-right:1px solid var(--border);
-      padding:12px 0;
-      position:sticky;top:105px;
-      height:calc(100vh - 105px);overflow-y:auto;
+      padding:15px 10px;
+      position:sticky;top:116px;
+      height:calc(100vh - 116px);overflow-y:auto;
     }
-    .sidebar-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:8px 16px 4px}
+    .sidebar-label{
+      font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0;
+      color:var(--muted);padding:4px 8px 9px;
+    }
     .sidebar-item{
       display:flex;align-items:center;gap:8px;
-      padding:7px 16px;font-size:13px;color:var(--muted);
+      min-height:36px;padding:7px 9px;margin-bottom:3px;border-radius:6px;
+      font-size:12px;font-weight:600;color:#50666a;
       cursor:pointer;transition:all .1s;
-      border-left:2px solid transparent;text-decoration:none;
+      border:1px solid transparent;text-decoration:none;
     }
-    .sidebar-item:hover{color:var(--text);background:var(--surface2)}
-    .sidebar-item.active{color:var(--text);border-left-color:var(--accent);background:rgba(88,166,255,.07)}
-    .sidebar-item .s-icon{font-size:14px;flex-shrink:0}
+    .sidebar-item:hover{color:var(--accent);background:var(--surface2)}
+    .sidebar-item.active{color:var(--accent);border-color:#bfd7d9;background:var(--teal-soft)}
+    .sidebar-item .s-icon{font-size:15px;flex-shrink:0}
     .sidebar-item .s-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .sidebar-item .s-count{
-      font-size:10px;font-weight:700;color:var(--red);
-      background:var(--red-bg);padding:1px 6px;border-radius:10px;
+      font-size:10px;font-weight:700;color:#765f09;
+      background:var(--yellow-soft);padding:2px 6px;border-radius:999px;
       display:none;flex-shrink:0;
     }
     .sidebar-item .s-count.show{display:block}
 
     /* ── Content ── */
-    .content{flex:1;padding:24px;overflow-x:hidden}
+    .content{flex:1;padding:26px clamp(18px,2.5vw,36px) 48px;overflow-x:hidden}
 
     /* ── Category section ── */
-    .cat-section{margin-bottom:36px;scroll-margin-top:115px}
+    .cat-section{margin-bottom:34px;scroll-margin-top:130px}
     .cat-title{
-      font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;
-      color:var(--muted);margin-bottom:12px;padding-bottom:8px;
-      border-bottom:1px solid var(--border);
+      font-family:Georgia,"Times New Roman",serif;font-size:19px;font-weight:500;
+      text-transform:none;letter-spacing:0;color:var(--accent);
+      margin-bottom:13px;padding-bottom:8px;border-bottom:1px solid #bfcfce;
       display:flex;align-items:center;gap:10px;
     }
     .cat-badge{
-      font-size:11px;font-weight:700;color:var(--red);
-      background:var(--red-bg);padding:1px 8px;border-radius:10px;
+      font-family:Inter,"Avenir Next","Segoe UI",Arial,sans-serif;
+      font-size:10px;font-weight:700;color:#765f09;
+      background:var(--yellow-soft);padding:2px 8px;border-radius:999px;
       letter-spacing:0;display:none;
     }
     .cat-badge.show{display:inline-flex}
@@ -123,66 +151,71 @@
 
     /* ── Item card ── */
     .item-card{
-      background:var(--surface);border:1px solid var(--border);
-      border-radius:8px;padding:12px 14px;transition:border-color .15s;
+      position:relative;background:var(--surface2);border:1px solid #c7dada;
+      border-top:4px solid var(--accent);border-radius:8px;padding:12px 14px 13px;
+      box-shadow:0 3px 10px rgba(22,43,48,.04);
+      transition:border-color .15s,background .15s;
     }
-    .item-card.needs-order{border-color:rgba(248,81,73,.45);background:rgba(248,81,73,.04)}
+    .item-card.needs-order{
+      border-color:#dcc75b;border-top-color:var(--yellow-border);background:var(--yellow-soft);
+    }
     .card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:8px}
-    .item-name{font-size:13px;font-weight:600;line-height:1.3}
+    .item-name{font-size:13px;font-weight:700;line-height:1.3;color:var(--text)}
     .vendor-tag{
-      font-size:10px;color:var(--muted);background:var(--surface2);
-      padding:2px 7px;border-radius:4px;white-space:nowrap;flex-shrink:0;
-      border:1px solid var(--border);
+      display:none;font-size:9px;font-weight:700;color:var(--accent);background:rgba(255,255,255,.7);
+      padding:3px 7px;border-radius:999px;white-space:nowrap;flex-shrink:0;
+      border:1px solid #bed3d4;
     }
     .card-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end}
     .field{display:flex;flex-direction:column;gap:3px}
-    .field-label{font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
-    .field-static{font-size:20px;font-weight:700;color:var(--muted);line-height:1.1}
+    .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0;color:#65797d}
+    .field-static{font-size:20px;font-weight:700;color:#4c666b;line-height:1.1}
     .order-qty{font-size:20px;font-weight:700;line-height:1.1}
     .order-qty.positive{color:var(--red)}
     .order-qty.zero{color:var(--green)}
     .order-qty.empty{color:var(--muted)}
     .field input[type=number]{
-      width:100%;background:var(--surface2);border:1px solid var(--border);
+      width:100%;background:var(--surface);border:1px solid #afc7c9;
       border-radius:6px;color:var(--text);font-size:20px;font-weight:700;
       padding:4px 6px;text-align:center;outline:none;
       -moz-appearance:textfield;transition:border-color .15s;
     }
     .field input[type=number]::-webkit-outer-spin-button,
     .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-    .field input[type=number]:focus{border-color:var(--accent)}
-    .item-card.needs-order .field input[type=number]{border-color:rgba(248,81,73,.3)}
+    .field input[type=number]:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(7,63,73,.12)}
+    .item-card.needs-order .field input[type=number]{border-color:#c4aa35}
     .card-footer{
-      margin-top:8px;font-size:10px;color:var(--muted);
+      margin-top:8px;padding-top:7px;border-top:1px solid rgba(100,118,122,.22);
+      font-size:10px;font-weight:700;color:var(--muted);
       display:flex;justify-content:space-between;
     }
 
     /* ── Vendor panel ── */
-    .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100}
+    .overlay{display:none;position:fixed;inset:0;background:rgba(22,43,48,.42);z-index:100}
     .overlay.open{display:block}
     .vendor-panel{
       position:fixed;top:0;right:-430px;bottom:0;width:430px;
       background:var(--surface);border-left:1px solid var(--border);
-      z-index:101;overflow-y:auto;transition:right .25s ease;
+      z-index:101;overflow-y:auto;transition:right .25s ease;box-shadow:-12px 0 30px rgba(22,43,48,.14);
     }
     .vendor-panel.open{right:0}
     .panel-header{
-      padding:18px 20px;border-bottom:1px solid var(--border);
+      padding:18px 20px;border-bottom:1px solid #bdd4d6;
       display:flex;justify-content:space-between;align-items:center;
-      position:sticky;top:0;background:var(--surface);z-index:1;
+      position:sticky;top:0;background:var(--teal-soft);z-index:1;
     }
-    .panel-header h2{font-size:15px;font-weight:600}
+    .panel-header h2{font-family:Georgia,"Times New Roman",serif;font-size:20px;font-weight:500;color:var(--accent)}
     .close-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:0 4px}
     .close-btn:hover{color:var(--text)}
     .vendor-section{padding:14px 20px;border-bottom:1px solid var(--border)}
     .vendor-section h3{
-      font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
-      color:var(--muted);margin-bottom:10px;
+      font-family:Georgia,"Times New Roman",serif;font-size:16px;font-weight:500;
+      text-transform:none;letter-spacing:0;color:var(--accent);margin-bottom:10px;
     }
     .vendor-section h3 em{color:var(--red);font-style:normal;margin-left:6px;font-size:12px}
     .vendor-row{
       display:flex;align-items:center;padding:7px 0;font-size:13px;
-      border-bottom:1px solid rgba(48,54,61,.5);
+      border-bottom:1px solid #e1e8e7;
     }
     .vendor-row:last-child{border-bottom:none}
     .v-name{flex:1}
@@ -194,6 +227,7 @@
     @media print{
       .app-header .header-actions,.stats-bar .vendor-pills,.sidebar,.overlay,.vendor-panel{display:none!important}
       .app-header{position:relative;height:auto;padding:12px 20px}
+      .stats-bar{position:relative;top:auto}
       .layout{display:block}
       .content{padding:8px}
       .items-grid{grid-template-columns:repeat(4,1fr);gap:6px}
@@ -208,14 +242,55 @@
       .field input[type=number]{background:#f5f5f5;border-color:#ccc;color:#111}
       .cat-title{color:#444;border-color:#ccc}
     }
+
+    @media (max-width:1100px){
+      .app-header{align-items:flex-start}
+      .header-actions{max-width:620px}
+    }
+
+    @media (max-width:800px){
+      .app-header{position:relative;min-height:0;padding:11px 12px;align-items:stretch;flex-direction:column;gap:10px}
+      .brand-lockup{min-width:0}
+      .brand-mark{width:40px;height:40px}
+      .app-header h1{width:100%;font-size:19px}
+      .header-actions{width:100%;overflow-x:auto;padding-bottom:2px}
+      .btn{min-height:34px;padding:0 11px;font-size:11px;flex:0 0 auto}
+      .stats-bar{position:relative;top:auto;padding:9px 12px;gap:11px}
+      .vendor-pills{width:100%;margin-left:0}
+      .layout{display:block}
+      .sidebar{
+        position:static;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--border);
+        display:flex;overflow-x:auto;padding:8px 10px;gap:4px;
+      }
+      .sidebar-label{display:none}
+      .sidebar-item{flex:0 0 auto;margin:0;padding:8px 10px}
+      .content{padding:14px 12px}
+      .items-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+      .vendor-panel{width:min(100vw,430px)}
+    }
+
+    @media (max-width:520px){
+      .app-header h1{align-items:flex-start;flex-direction:column;gap:2px}
+      .brand-kicker{font-size:8px}
+      .items-grid{grid-template-columns:1fr}
+      .toast{left:12px;right:12px;bottom:12px}
+    }
   </style>
 </head>
 <body>
 
 <header class="app-header">
-  <h1>🍽️ Kitchen Order Sheet <span id="dateLabel"></span></h1>
+  <div class="brand-lockup">
+    <div class="brand-mark" aria-hidden="true">OPE</div>
+    <div class="brand-copy">
+      <div class="brand-kicker">On Par Entertainment</div>
+      <h1>Kitchen Order Sheet <span id="dateLabel"></span></h1>
+    </div>
+  </div>
   <div class="header-actions">
     <button class="btn btn-danger" onclick="resetAll()">↺ Reset</button>
+    <button class="btn btn-success" id="saveSharedBtn" onclick="saveSharedSnapshot()">💾 Save Count</button>
+    <button class="btn" id="loadSharedBtn" onclick="loadSharedSnapshot({force:true})">↧ Load Saved</button>
     <button class="btn" onclick="togglePanel()">📋 By Vendor</button>
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
     <button class="btn btn-success" id="generateBtn" onclick="generateOrder()" disabled title="Fill in all on-hand counts to enable">🚀 Generate Order</button>
@@ -226,6 +301,7 @@
   <div class="stat"><span class="stat-label">Need to Order</span><span class="stat-value red" id="needCount">–</span></div>
   <div class="stat"><span class="stat-label">Stocked</span><span class="stat-value green" id="stockedCount">–</span></div>
   <div class="stat"><span class="stat-label">Not Counted</span><span class="stat-value" id="uncountedCount">–</span></div>
+  <div class="stat"><span class="stat-label">Shared Save</span><span class="stat-value" id="saveStatus">Checking…</span></div>
   <div class="vendor-pills" id="vendorPills"></div>
 </div>
 
@@ -251,9 +327,9 @@ const CATEGORIES = [
     items:[
       {id:1,  name:"Thermal Paper",             buildTo:2,  vendor:"US FOODS",   price:null,   unit:""},
       {id:2,  name:"Use First Stickers",         buildTo:2,  vendor:"GFS",        price:null,   unit:""},
-      {id:3,  name:"Labels",                     buildTo:2,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:3,  name:"Labels",                     buildTo:4,  vendor:"US FOODS",   price:null,   unit:""},
       {id:4,  name:"Shopping Bags",              buildTo:1,  vendor:"US FOODS",   price:null,   unit:""},
-      {id:6,  name:"Portion Bags",               buildTo:2,  vendor:"I SUPPLY",   price:50.40,  unit:""},
+      {id:6,  name:"Sandwich Bags",               buildTo:2,  vendor:"I SUPPLY",   price:50.40,  unit:""},
     ]
   },
   {
@@ -299,14 +375,13 @@ const CATEGORIES = [
       {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL"},
       {id:47, name:"Fire Roasted Salsa",         buildTo:8,  vendor:"US FOODS",   price:53.28,  unit:"4/68 OZ"},
       {id:50, name:"Black Beans",                buildTo:3,  vendor:"PFG",        price:91.25,  unit:"24/15.5oz"},
-      {id:51, name:"Shortening",                 buildTo:28, vendor:"US FOODS",   price:31.03,  unit:"35 LB"},
+      {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB"},
       {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB"},
     ]
   },
   {
     id:"disposables", name:"Disposables", icon:"🥡",
     items:[
-      {id:53, name:"To-Go Black Base Clear Top", buildTo:2,  vendor:"I SUPPLY",   price:null,   unit:""},
       {id:54, name:"Styrofoam To-Go Containers", buildTo:4,  vendor:"I SUPPLY",   price:23.99,  unit:"200"},
       {id:55, name:"Can Liners",                 buildTo:6,  vendor:"I SUPPLY",   price:24.99,  unit:"5 Rolls"},
       {id:56, name:"Deli Paper",                 buildTo:3,  vendor:"US FOODS",   price:83.09,  unit:"12/500"},
@@ -332,9 +407,9 @@ const CATEGORIES = [
       {id:75, name:"Cucumbers",                  buildTo:1,  vendor:"PFG",        price:10.32,  unit:"12 EA"},
       {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
-      {id:79, name:"Burger Patties",             buildTo:11, vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
+      {id:79, name:"Burger Patties",             buildTo:5,  vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
       {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  vendor:"US FOODS",   price:94.75,  unit:"4/5 LB"},
-      {id:82, name:"Chicken Wings",              buildTo:12, vendor:"US FOODS",   price:51.38,  unit:"40 LB"},
+      {id:82, name:"Chicken Wings",              buildTo:7,  vendor:"US FOODS",   price:51.38,  unit:"40 LB"},
       {id:83, name:"Assorted Peppers",           buildTo:1,  vendor:"US FOODS",   price:22.63,  unit:"5 LB"},
       {id:84, name:"Cherry Tomatoes",            buildTo:1,  vendor:"US FOODS",   price:27.92,  unit:"10 LB"},
       {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#"},
@@ -366,10 +441,8 @@ const CATEGORIES = [
       {id:119,name:"Fajita Chicken",             buildTo:6,  vendor:"PFG",        price:63.16,  unit:"2/5 LB"},
       {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
       {id:121,name:"JTM Taco Meat",              buildTo:8,  vendor:"US FOODS",   price:74.17,  unit:"4/5 LB"},
-      {id:122,name:"Tenders",                    buildTo:21, vendor:"PFG",        price:32.98,  unit:"2/5 LB"},
-      {id:123,name:"Boneless Wings",             buildTo:12, vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
+      {id:122,name:"Tenders",                    buildTo:10, vendor:"PFG",        price:32.98,  unit:"2/5 LB"},
       {id:125,name:"Milwaukee Pretzel",          buildTo:20, vendor:"US FOODS",   price:58.25,  unit:"8/24 OZ"},
-      {id:126,name:"David's Cookies",            buildTo:4,  vendor:"US FOODS",   price:83.21,  unit:"80/4.5 OZ"},
       {id:128,name:"Tater Kegs",                 buildTo:12, vendor:"US FOODS",   price:41.37,  unit:"10 LB"},
     ]
   },
@@ -411,15 +484,19 @@ const CATEGORIES = [
 // ── State ──────────────────────────────────────────────
 const STATE_KEY = 'kitchen_order_v1';
 let state = {};
+let sectionObserver = null;
 
 function loadState(){
   try{ const s = localStorage.getItem(STATE_KEY); if(s) state = JSON.parse(s); }catch(e){}
 }
 function saveState(){ try{ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }catch(e){} }
 function getOnHand(id){ return state[id] !== undefined ? state[id] : ''; }
+function normalizeName(name){ return String(name || '').toLowerCase().trim().replace(/\s+/g,' '); }
+function hasLocalCounts(){ return Object.keys(state).length > 0; }
 function setOnHand(id, val){
   if(val===''||val===null){ delete state[id]; } else { state[id]=parseFloat(val); }
   saveState();
+  setSaveStatus('Unsaved changes');
 }
 
 function calcOrder(buildTo, raw){
@@ -481,9 +558,8 @@ function renderCard(item){
           <div class="order-qty ${orderCls}" id="oq-${item.id}">${orderText}</div>
         </div>
       </div>
-      ${(item.price||item.unit)?`<div class="card-footer">
-        <span>${item.unit||''}</span>
-        ${item.price?`<span>$${item.price.toFixed(2)}</span>`:''}
+      ${item.price?`<div class="card-footer">
+        <span>$${item.price.toFixed(2)}</span>
       </div>`:''}
     </div>`;
 }
@@ -553,6 +629,123 @@ function updateStats(){
       .sort((a,b)=>b[1]-a[1])
       .map(([v,c])=>`<span class="pill pill-red">${v} <strong>${c}</strong></span>`)
       .join('');
+}
+
+function setSaveStatus(text, isError=false){
+  const el=document.getElementById('saveStatus');
+  if(!el) return;
+  el.textContent=text;
+  el.className='stat-value'+(isError?' red':'');
+}
+
+function collectCountRows(){
+  const rows=[];
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      const oh=getOnHand(item.id);
+      if(oh!=='' && oh!==undefined && oh!==null){
+        rows.push({
+          id:item.id,
+          name:item.name,
+          category:cat.name,
+          unit:item.unit || 'case',
+          on_hand:parseFloat(oh),
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+async function saveSharedSnapshot(){
+  const btn=document.getElementById('saveSharedBtn');
+  const rows=collectCountRows();
+  if(!rows.length){
+    showToast('Nothing to save yet.', true, 5000);
+    return;
+  }
+
+  btn.textContent='Saving…';
+  btn.setAttribute('disabled','');
+  setSaveStatus('Saving…');
+
+  try{
+    const resp=await fetch('/api/inventory_snapshot',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        notes:'Saved from Kitchen Order Sheet',
+        items:rows,
+      }),
+    });
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || resp.statusText);
+
+    const when=data.snapshot && data.snapshot.taken_at
+      ? new Date(data.snapshot.taken_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+      : 'now';
+    setSaveStatus(`Saved ${when}`);
+    showToast(`Saved ${data.saved_count || rows.length} counts to shared inventory.`);
+  }catch(e){
+    setSaveStatus('Save failed', true);
+    showToast('Save failed: '+e.message, true, 8000);
+  }
+
+  btn.textContent='💾 Save Count';
+  btn.removeAttribute('disabled');
+}
+
+async function loadSharedSnapshot(opts={}){
+  const force=!!opts.force;
+  const btn=document.getElementById('loadSharedBtn');
+  if(btn) btn.setAttribute('disabled','');
+  if(force) setSaveStatus('Loading…');
+
+  try{
+    const resp=await fetch('/api/inventory_snapshot');
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(data.error || resp.statusText);
+    if(!data.snapshot){
+      setSaveStatus('No shared count');
+      return;
+    }
+
+    const when=data.snapshot.taken_at
+      ? new Date(data.snapshot.taken_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+      : 'available';
+
+    if(!force && hasLocalCounts()){
+      setSaveStatus(`Saved ${when}`);
+      return;
+    }
+
+    const counts=data.counts || {};
+    const byName={};
+    Object.keys(counts).forEach(name=>{ byName[normalizeName(name)]=counts[name]; });
+
+    const nextState={};
+    for(const cat of CATEGORIES){
+      for(const item of cat.items){
+        const val=byName[normalizeName(item.name)];
+        if(val!==undefined && val!==null && val!==''){
+          nextState[item.id]=parseFloat(val);
+        }
+      }
+    }
+
+    state=nextState;
+    saveState();
+    renderContent();
+    updateStats();
+    observeSections();
+    setSaveStatus(`Loaded ${when}`);
+    if(force) showToast('Loaded the latest shared inventory count.');
+  }catch(e){
+    setSaveStatus('Load failed', true);
+    if(force) showToast('Load failed: '+e.message, true, 8000);
+  }finally{
+    if(btn) btn.removeAttribute('disabled');
+  }
 }
 
 // ── Vendor panel ────────────────────────────────────────
@@ -675,21 +868,26 @@ loadState();
 renderSidebar();
 renderContent();
 updateStats();
+loadSharedSnapshot();
 
 document.getElementById('dateLabel').textContent =
   new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 
 // Highlight active sidebar section on scroll
-const io = new IntersectionObserver(entries=>{
-  entries.forEach(e=>{
-    if(e.isIntersecting){
-      document.querySelectorAll('.sidebar-item').forEach(el=>{
-        el.classList.toggle('active', el.getAttribute('href')==='#'+e.target.id);
-      });
-    }
-  });
-},{threshold:0.25,rootMargin:'-110px 0px -55% 0px'});
-document.querySelectorAll('.cat-section').forEach(el=>io.observe(el));
+function observeSections(){
+  if(sectionObserver) sectionObserver.disconnect();
+  sectionObserver = new IntersectionObserver(entries=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        document.querySelectorAll('.sidebar-item').forEach(el=>{
+          el.classList.toggle('active', el.getAttribute('href')==='#'+e.target.id);
+        });
+      }
+    });
+  },{threshold:0.25,rootMargin:'-110px 0px -55% 0px'});
+  document.querySelectorAll('.cat-section').forEach(el=>sectionObserver.observe(el));
+}
+observeSections();
 </script>
 </body>
 </html>

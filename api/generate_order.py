@@ -33,10 +33,10 @@ BROADLINER_IDS = [1, 2, 3, 4]
 VENDOR_NAMES   = {1: "US Foods", 2: "PFG", 3: "Sysco", 4: "GFS"}
 VENDOR_ABBR    = {1: "USF",      2: "PFG", 3: "SYC",   4: "GFS"}
 VENDOR_COLOR   = {
-    1: ("#1d4e89", "#dce8f8"),
-    2: ("#b5451b", "#fce8e0"),
-    3: ("#1a6b3c", "#ddf3e8"),
-    4: ("#7a5c00", "#fdf3d0"),
+    1: ("#0f8f4f", "#dff5e9"),
+    2: ("#111111", "#e9ecef"),
+    3: ("#1f6feb", "#dceaff"),
+    4: ("#d71920", "#fde2e4"),
 }
 MINIMUMS = {
     1: ("cases",   20),
@@ -65,6 +65,12 @@ FILLER_CAPS_BY_CATEGORY = {
 }
 MIN_RESCUE_SAVINGS = 25.0
 LOW_FILLER_SPEND_LIMIT = 50.0
+
+REQUIRED_VENDOR_BY_ITEM = {
+    "pot & pan detergent": 1,
+    "pre soak": 1,
+    "heavy duty rinse additive": 1,
+}
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
@@ -217,10 +223,22 @@ def minimum_label(vid):
     min_type, min_val = MINIMUMS[vid]
     return f"${min_val:,.0f}" if min_type == "dollars" else f"{min_val} cases"
 
+def required_vendor(item):
+    return REQUIRED_VENDOR_BY_ITEM.get(item["name"].lower().strip())
+
 def assign_cheapest(canonical_items, best_prices, active):
     assignment = {}
     for ci in canonical_items:
         if ci["order_qty"] <= 0:
+            continue
+        required_vid = required_vendor(ci)
+        if required_vid is not None:
+            if (
+                required_vid in active
+                and ci["id"] in best_prices
+                and required_vid in best_prices[ci["id"]]
+            ):
+                assignment[ci["id"]] = required_vid
             continue
         opts = {
             v: best_prices[ci["id"]][v]
@@ -305,6 +323,11 @@ def basket_total(assignment, items_by_id, best_prices, filler_cases=None):
 def settle_by_dropping(canonical_items, best_prices, active, filler_cases=None):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
     active = set(active)
+    required_vids = {
+        required_vendor(ci)
+        for ci in canonical_items
+        if ci["order_qty"] > 0 and required_vendor(ci) is not None
+    }
     dropped = set()
     assignment = {}
     for _ in range(10):
@@ -317,6 +340,7 @@ def settle_by_dropping(canonical_items, best_prices, active, filler_cases=None):
             v for v in active
             if vendor_cases.get(v, 0) > 0
             and not meets_minimum(v, vendor_cases.get(v, 0), vendor_spend.get(v, 0.0))
+            and v not in required_vids
         }
         if not failing:
             break
@@ -333,6 +357,9 @@ def build_rescue_fillers(vid, canonical_items, best_prices, assignment, filler_c
 
     candidates = []
     for ci in canonical_items:
+        required_vid = required_vendor(ci)
+        if required_vid is not None and required_vid != vid:
+            continue
         cap = filler_cap(ci)
         if cap <= 0:
             continue
@@ -434,6 +461,12 @@ def optimize_basket(canonical_items, best_prices):
     dropped = set()
     filler_cases = {}
     assignment = {}
+    required_vids = {
+        required_vendor(ci)
+        for ci in canonical_items
+        if ci["order_qty"] > 0 and required_vendor(ci) is not None
+    }
+    allowed_below_minimum = set()
 
     for _ in range(20):
         filler_cases = filter_filler_cases(filler_cases, active)
@@ -445,6 +478,7 @@ def optimize_basket(canonical_items, best_prices):
             v for v in active
             if vendor_cases.get(v, 0) > 0
             and not meets_minimum(v, vendor_cases.get(v, 0), vendor_spend.get(v, 0.0))
+            and v not in allowed_below_minimum
         }
         if not failing:
             break
@@ -487,6 +521,14 @@ def optimize_basket(canonical_items, best_prices):
             notes.append(rescue_note(vid, plan, savings_vs_drop, items_by_id))
             continue
 
+        if vid in required_vids:
+            notes.append(
+                f"{VENDOR_NAMES[vid]} kept below minimum ({shortfall}) because "
+                "the order contains contract-restricted dish-machine chemicals."
+            )
+            allowed_below_minimum.add(vid)
+            continue
+
         notes.append(
             f"{VENDOR_NAMES[vid]} dropped — minimum not met ({shortfall}). "
             "Dropping/reassigning was cheaper than adding safe minimum filler."
@@ -507,6 +549,12 @@ def compute_savings(assignment, canonical_items, best_prices):
         item   = items_by_id[can_id]
         cases  = max(1, int(item["order_qty"]))
         prices = best_prices.get(can_id, {})
+        required_vid = required_vendor(item)
+        if required_vid is not None:
+            prices = {
+                v: data for v, data in prices.items()
+                if v == required_vid
+            }
         if not prices:
             continue
         paid_price = prices[vid]["price"]

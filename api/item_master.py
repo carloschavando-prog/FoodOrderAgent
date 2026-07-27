@@ -4,7 +4,8 @@ GET /api/item_master
 Returns the live cross-vendor item master as text/html.
 Queries Supabase on every request so it shows current data.
 
-Columns: On Par ID | Item Description | vendor product ID, case price, unit price, broadliner item name
+Columns: On Par ID | Item Description | vendor product ID, case cost, unit cost,
+one-line description, and last scraped/updated timestamp
 Grouped by category, color-coded by vendor coverage.
 """
 
@@ -16,6 +17,7 @@ import urllib.parse
 import html
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
+from zoneinfo import ZoneInfo
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -52,32 +54,6 @@ SORT_NAME_OVERRIDES = {
     # Preserve the established OP-DS011 position after the display rename.
     25: "Golden Sauce",
 }
-
-# Catalog matches that are verified but do not have a usable current price.
-# These display in the item master only; generated orders still require priced rows.
-CATALOG_ONLY_MATCHES = {
-    (5, 1): {
-        "apn": "8690061",
-        "price": None,
-        "vendor_item_name": "US Foods Monogram Bag, Shopping 13x7x17 Paper Kraft Brown Carry-out",
-        "unit_basis": None,
-        "unit_quantity": 250,
-        "unit_price": None,
-        "unit_note": "US Foods Monogram Bag, Shopping 13x7x17 Paper Kraft Brown Carry-out, 250 EA; base catalog match verified, price not visible in current US Foods session.",
-        "pulled_at": None,
-    },
-    (7, 1): {
-        "apn": "6645220",
-        "price": None,
-        "vendor_item_name": "US Foods Handgards Bag, Food Storage 7x7 Sandwich Clear Plastic",
-        "unit_basis": None,
-        "unit_quantity": 2000,
-        "unit_price": None,
-        "unit_note": "US Foods Handgards Bag, Food Storage 7x7 Sandwich Clear Plastic, 2000 EA; catalog match verified, price not visible in current US Foods session.",
-        "pulled_at": None,
-    },
-}
-
 
 def sb_get_all(path, page_size=1000):
     rows = []
@@ -132,7 +108,7 @@ def load_data():
 
     all_pricing = sb_get_all(
         "pricing?select=item_id,vendor_id,apn,price,price_list_id,pulled_at,"
-        "unit_basis,unit_quantity,unit_price,unit_note,vendor_item_name"
+        "pack_size,unit_basis,unit_quantity,unit_price,unit_note,vendor_item_name"
         "&order=price_list_id.asc"
     )
     vendor_prices = defaultdict(dict)
@@ -142,13 +118,15 @@ def load_data():
             continue
         apn = row.get("apn") or ""
         price = row.get("price")
-        if not apn and price is None:
+        # Only complete, orderable rows count as confirmed vendor matches.
+        if not apn or price is None:
             continue
         can_id = id_to_canonical.get(row["item_id"], row["item_id"])
         pulled_at = price_list_pulled_at.get(row.get("price_list_id")) or row.get("pulled_at")
         vendor_prices[can_id][vid] = {
             "apn": apn,
             "price": price,
+            "pack_size": row.get("pack_size"),
             "unit_basis": row.get("unit_basis"),
             "unit_quantity": row.get("unit_quantity"),
             "unit_price": row.get("unit_price"),
@@ -156,9 +134,6 @@ def load_data():
             "vendor_item_name": row.get("vendor_item_name"),
             "pulled_at": pulled_at,
         }
-
-    for (can_id, vid), row in CATALOG_ONLY_MATCHES.items():
-        vendor_prices.setdefault(can_id, {}).setdefault(vid, row)
 
     return canonical_items, dict(vendor_prices)
 
@@ -191,25 +166,29 @@ header .subtitle{font-size:.85rem;opacity:.65;margin-top:3px}
 .summary-bar span{color:#6c757d}
 .summary-bar strong{color:#1a1a2e}
 .table-wrap{overflow:visible;padding:20px 24px}
-table{width:100%;min-width:860px;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);border-radius:8px;overflow:visible;font-size:.82rem}
+table{width:100%;min-width:1280px;border-collapse:separate;border-spacing:0;background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);border-radius:8px;overflow:visible;font-size:.82rem}
 thead{position:sticky;top:0;z-index:20}
 thead tr{background:#1a1a2e;color:#fff;text-transform:uppercase;font-size:.72rem;letter-spacing:.07em}
 thead th{padding:11px 12px;text-align:left;white-space:nowrap;background:#1a1a2e}
-th.vnd{min-width:170px;text-align:center}
+th.vnd{min-width:225px;text-align:center}
 th.usf{color:#8ee6b0} th.pfg{color:#f8f9fa} th.syc{color:#9ec8ff} th.gfs{color:#ffb3b6}
 .cat-row{background:#1a1a2e;color:#e0e0ff;font-weight:700;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase}
 .cat-row td{padding:7px 12px}
 tbody tr:not(.cat-row){border-bottom:1px solid #e9ecef}
 tbody tr:not(.cat-row):hover{filter:brightness(.97)}
 td{padding:8px 12px;vertical-align:middle}
-td.apn{text-align:center;font-family:'SF Mono','Fira Code',monospace;font-size:.78rem}
+td.apn{text-align:left;font-size:.78rem}
 td.blank{text-align:center;color:#ced4da}
 .cov4{background:#f0faf3}.cov3{background:#f0f8fb}.cov2{background:#fffdf0}.cov1{background:#fff7f7}.cov0{background:#f5f5f5}
-.vendor-cell{display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2}
-.pill{display:inline-block;padding:2px 7px;border-radius:12px;font-size:.72rem;font-weight:600}
+.vendor-cell{display:flex;flex-direction:column;align-items:stretch;gap:4px;line-height:1.25;text-align:left}
+.field-line{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px;align-items:start}
+.field-label{color:#6c757d;font-size:.65rem;font-weight:700;text-transform:uppercase}
+.field-value{min-width:0;overflow-wrap:anywhere}
+.pill{display:inline-block;padding:2px 7px;border-radius:12px;font-family:'SF Mono','Fira Code',monospace;font-size:.72rem;font-weight:600}
 .price{font-weight:700;color:#1a1a2e}
 .unit-price{font-size:.7rem;color:#495057;font-weight:650}
-.vendor-name{max-width:180px;color:#495057;font-size:.7rem;line-height:1.25;text-align:center}
+.vendor-name{color:#495057;font-size:.7rem;line-height:1.25}
+.updated-at{color:#6c757d;font-size:.67rem;white-space:nowrap}
 .op-id{font-family:'SF Mono','Fira Code',monospace;font-size:.75rem;color:#6c757d;font-weight:600}
 .item-name{font-weight:500}
 """
@@ -226,13 +205,48 @@ def fmt_money(value):
 def fmt_unit_price(data):
     value = data.get("unit_price")
     if value is None:
-        return ""
+        return "Not available"
     basis = data.get("unit_basis") or "unit"
     try:
         price = float(value)
     except (TypeError, ValueError):
-        return ""
+        return "Not available"
     return f"${price:,.4f}/{basis}"
+
+
+def fmt_timestamp(value, human=True):
+    if not value:
+        return "Not available"
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        eastern = parsed.astimezone(ZoneInfo("America/New_York"))
+        if human:
+            return eastern.strftime("%b %d, %Y %I:%M %p %Z").replace(" 0", " ")
+        return eastern.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def field_line(label, value, value_class=""):
+    class_name = f"field-value {value_class}".strip()
+    return (
+        '<div class="field-line">'
+        f'<span class="field-label">{html.escape(label)}</span>'
+        f'<span class="{class_name}">{value}</span>'
+        "</div>"
+    )
+
+
+def description_for(data):
+    description = str(data.get("vendor_item_name") or "").strip()
+    if description:
+        return " ".join(description.split())
+    note = str(data.get("unit_note") or "").strip()
+    if note:
+        return " ".join(note.split(";", 1)[0].split())
+    return "Description not available"
 
 
 
@@ -240,17 +254,19 @@ def vendor_cell(data, vid):
     dark, light = VENDOR_COLOR.get(vid, ("#333", "#eee"))
     apn = html.escape(str(data.get("apn") or ""))
     price = fmt_money(data.get("price"))
-    vendor_item_name = html.escape(str(data.get("vendor_item_name") or ""))
+    description = html.escape(description_for(data))
+    updated_at = html.escape(fmt_timestamp(data.get("pulled_at")))
     parts = ['<div class="vendor-cell">']
-    if apn:
-        parts.append(f'<span class="pill" style="background:{light};color:{dark}">{apn}</span>')
-    if price:
-        parts.append(f'<div class="price">{price}</div>')
+    product_id = (
+        f'<span class="pill" style="background:{light};color:{dark}">{apn}</span>'
+        if apn else "Not available"
+    )
+    parts.append(field_line("Product ID", product_id))
+    parts.append(field_line("Case", html.escape(price or "Not available"), "price"))
     unit_price = fmt_unit_price(data)
-    if unit_price:
-        parts.append(f'<div class="unit-price">{html.escape(unit_price)}</div>')
-    if vendor_item_name:
-        parts.append(f'<div class="vendor-name">{vendor_item_name}</div>')
+    parts.append(field_line("Unit", html.escape(unit_price), "unit-price"))
+    parts.append(field_line("Description", description, "vendor-name"))
+    parts.append(field_line("Updated", updated_at, "updated-at"))
     parts.append("</div>")
     return "".join(parts)
 
@@ -265,9 +281,10 @@ def build_tsv(canonical_items, vendor_prices):
         vendor = VENDOR_NAMES[vid]
         headers.extend([
             f"{vendor} Product ID",
-            f"{vendor} Case Price",
-            f"{vendor} Unit Price",
-            f"{vendor} Item Name",
+            f"{vendor} Case Cost",
+            f"{vendor} Unit Cost",
+            f"{vendor} Description",
+            f"{vendor} Updated At",
         ])
     rows = ["\t".join(headers)]
     for item in canonical_items:
@@ -275,19 +292,25 @@ def build_tsv(canonical_items, vendor_prices):
         row = [CAT_NAME.get(cat_id, ""), item["op_id"], item["name"]]
         prices = vendor_prices.get(item["id"], {})
         for vid in VENDOR_IDS:
-            data = prices.get(vid, {})
+            data = prices.get(vid)
+            if not data:
+                row.extend(["", "", "", "", ""])
+                continue
             row.extend([
                 str(data.get("apn") or ""),
                 fmt_money(data.get("price")),
                 fmt_unit_price(data),
-                str(data.get("vendor_item_name") or ""),
+                description_for(data),
+                fmt_timestamp(data.get("pulled_at"), human=False),
             ])
         rows.append("\t".join(row))
     return "\n".join(rows)
 
 
 def build_html(canonical_items, vendor_prices):
-    now = datetime.datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    now = datetime.datetime.now(ZoneInfo("America/New_York")).strftime(
+        "%B %d, %Y at %I:%M %p %Z"
+    )
     total = len(canonical_items)
     counts = [sum(1 for ci in canonical_items if len(vendor_prices.get(ci["id"], {})) == n) for n in range(5)]
 

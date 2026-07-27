@@ -172,16 +172,16 @@ HTML_HEAD = """\
 <title>On Par — Item Master · Cross-Vendor Coverage</title>
 <style>
   :root {
-    --usf:  #1d4e89;   /* US Foods  — dark blue   */
-    --pfg:  #b5451b;   /* PFG       — burnt orange */
-    --syc:  #1a6b3c;   /* Sysco     — dark green  */
-    --gfs:  #7a5c00;   /* GFS       — gold/brown  */
+    --usf:  #0f8f4f;   /* US Foods green */
+    --pfg:  #111111;   /* PFG black      */
+    --syc:  #1f6feb;   /* Sysco blue     */
+    --gfs:  #d71920;   /* GFS red        */
     --bg:   #f4f5f7;
     --card: #ffffff;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         background: var(--bg); color: #1a1a2e; }
+         background: var(--bg); color: #1a1a2e; overflow-x: auto; }
   header { background: #1a1a2e; color: #fff; padding: 18px 32px;
            display: flex; justify-content: space-between; align-items: center; }
   header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: .03em; }
@@ -200,20 +200,21 @@ HTML_HEAD = """\
   .summary-bar span { color: #6c757d; }
   .summary-bar strong { color: #1a1a2e; }
 
-  .table-wrap { overflow-x: auto; padding: 20px 24px; }
-  table { width: 100%; border-collapse: collapse; background: var(--card);
+  .table-wrap { overflow: visible; padding: 20px 24px; }
+  table { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; background: var(--card);
           box-shadow: 0 1px 3px rgba(0,0,0,.12); border-radius: 8px;
-          overflow: hidden; font-size: .82rem; }
+          overflow: visible; font-size: .82rem; }
+  thead { position: sticky; top: 0; z-index: 20; }
   thead tr { background: #1a1a2e; color: #fff; text-transform: uppercase;
              font-size: .72rem; letter-spacing: .07em; }
-  thead th { padding: 11px 12px; text-align: left; white-space: nowrap; }
+  thead th { padding: 11px 12px; text-align: left; white-space: nowrap; background: #1a1a2e; }
   thead th.op-col  { min-width: 90px; }
   thead th.nm-col  { min-width: 200px; }
   thead th.vnd-col { min-width: 110px; text-align: center; }
-  thead th.usf  { color: #9ec8ff; }
-  thead th.pfg  { color: #ffc9a8; }
-  thead th.syc  { color: #a8f0c8; }
-  thead th.gfs  { color: #ffe08a; }
+  thead th.usf  { color: #8ee6b0; }
+  thead th.pfg  { color: #f8f9fa; }
+  thead th.syc  { color: #9ec8ff; }
+  thead th.gfs  { color: #ffb3b6; }
 
   .cat-row { background: #1a1a2e; color: #e0e0ff; font-weight: 700;
              font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; }
@@ -237,10 +238,10 @@ HTML_HEAD = """\
   /* Vendor pill in APN cells */
   .pill { display: inline-block; padding: 2px 7px; border-radius: 12px;
           font-size: .72rem; font-weight: 600; letter-spacing: .03em; }
-  .pill-usf { background: #dce8f8; color: var(--usf); }
-  .pill-pfg { background: #fce8e0; color: var(--pfg); }
-  .pill-syc { background: #ddf3e8; color: var(--syc); }
-  .pill-gfs { background: #fdf3d0; color: var(--gfs); }
+  .pill-usf { background: #dff5e9; color: var(--usf); }
+  .pill-pfg { background: #e9ecef; color: var(--pfg); }
+  .pill-syc { background: #dceaff; color: var(--syc); }
+  .pill-gfs { background: #fde2e4; color: var(--gfs); }
 
   .op-id { font-family: 'SF Mono','Fira Code',monospace; font-size: .75rem;
            color: #6c757d; font-weight: 600; }

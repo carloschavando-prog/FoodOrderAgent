@@ -96,6 +96,26 @@ CREATE TABLE IF NOT EXISTS basket_items (
   UNIQUE (basket_id, item_id)
 );
 
+-- INVENTORY SNAPSHOTS ------------------------------------
+-- One header row per physical count, with line items below.
+-- Used by the Integrator app for food/beverage cost:
+-- starting inventory + purchases - ending inventory / sales.
+CREATE TABLE IF NOT EXISTS inventory_snapshots (
+  id        SERIAL PRIMARY KEY,
+  taken_at  TIMESTAMPTZ DEFAULT NOW(),
+  taken_by  TEXT,
+  notes     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS inventory_snapshot_items (
+  id           SERIAL PRIMARY KEY,
+  snapshot_id  INT NOT NULL REFERENCES inventory_snapshots(id) ON DELETE CASCADE,
+  item_id      INT REFERENCES items(id),
+  item_name    TEXT NOT NULL,
+  on_hand_qty  NUMERIC NOT NULL,
+  unit         TEXT DEFAULT 'case'
+);
+
 -- PRICE COMPARISON VIEW -----------------------------------
 -- Shows cheapest vendor for each item across all price lists
 CREATE OR REPLACE VIEW cheapest_prices AS

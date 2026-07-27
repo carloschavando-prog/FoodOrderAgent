@@ -6,3 +6,4 @@ node_modules/
 weekly_order.html
 item_master.html
 .order_counts.json
+.vercel
