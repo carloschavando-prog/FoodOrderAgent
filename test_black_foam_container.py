@@ -2,6 +2,7 @@ import unittest
 
 from api import generate_order
 from order_normalization import pricing_matches_item_requirements
+from scrape_sysco import match_item as match_sysco_item
 from scrape_usfoods import match_item
 
 
@@ -42,6 +43,17 @@ class BlackFoamContainerTests(unittest.TestCase):
 
         self.assertIsNone(match_item(white, "7804644", item_map))
         self.assertEqual(match_item(black, "1136414", item_map), 41)
+
+    def test_sysco_scraper_does_not_fuzzy_match_white_container(self):
+        item_map = {
+            "by_apn": {"7302704": 41},
+            "by_name": {"styrofoam to-go containers": 41},
+        }
+        white = "Container Foam Hinged White 1 Compartment"
+        black = "Container Foam Hinged Black 1 Compartment"
+
+        self.assertIsNone(match_sysco_item(white, "7551334", item_map))
+        self.assertEqual(match_sysco_item(black, "7302704", item_map), 41)
 
     def test_live_apn_can_be_assigned_by_generator(self):
         pricing = {

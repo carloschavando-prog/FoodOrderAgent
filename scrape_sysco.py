@@ -889,6 +889,15 @@ def _word_overlap(a, b):
     return len(shorter & longer) / len(shorter)
 
 
+def _compatible_product(item_name, product_name):
+    """Reject catalog products that violate required item traits."""
+    item_key = (item_name or "").lower().strip()
+    product_key = (product_name or "").lower()
+    if item_key == "styrofoam to-go containers":
+        return "black" in product_key and "white" not in product_key
+    return True
+
+
 def match_item(name, apn, item_map):
     """Match a Sysco product to a Supabase item_id by APN then by name."""
     # 1. Exact APN match (previous run stored productId in apn column)
@@ -896,18 +905,26 @@ def match_item(name, apn, item_map):
         return item_map["by_apn"][apn.upper()]
     # 2. Exact name match (raw, then prefix-stripped)
     n = (name or "").lower().strip()
-    if n in item_map["by_name"]:
+    if n in item_map["by_name"] and _compatible_product(n, name):
         return item_map["by_name"][n]
     n_stripped = _strip_vendor_prefix(n)
-    if n_stripped in item_map["by_name"]:
+    if (
+        n_stripped in item_map["by_name"]
+        and _compatible_product(n_stripped, name)
+    ):
         return item_map["by_name"][n_stripped]
     # 3. Substring match (use stripped name to avoid brand false hits)
     for k, v in item_map["by_name"].items():
-        if k in n_stripped or n_stripped in k:
+        if (
+            (k in n_stripped or n_stripped in k)
+            and _compatible_product(k, name)
+        ):
             return v
     # 4. Word-overlap with synonym expansion (threshold 0.65)
     best_score, best_id = 0.0, None
     for k, v in item_map["by_name"].items():
+        if not _compatible_product(k, name):
+            continue
         score = _word_overlap(n_stripped, k)
         if score > best_score:
             best_score, best_id = score, v
