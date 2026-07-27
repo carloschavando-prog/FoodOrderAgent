@@ -41,12 +41,22 @@ class OrderCycleUiTests(unittest.TestCase):
         )
         self.assertIn(
             'name:"Double Lobe Chicken Breasts",buildTo:4,  '
-            "tuesdayBuildTo:4, fridayBuildTo:4",
+            "tuesdayBuildTo:3, fridayBuildTo:4",
             self.source,
         )
         self.assertIn(
             'name:"Tenders",                    buildTo:10, '
             "tuesdayBuildTo:6, fridayBuildTo:10",
+            self.source,
+        )
+        self.assertIn(
+            'name:\'Tortilla, Flour 12"\',        buildTo:7,  '
+            "tuesdayBuildTo:5, fridayBuildTo:7",
+            self.source,
+        )
+        self.assertIn(
+            'name:"Pizza Cheese",               buildTo:10, '
+            "tuesdayBuildTo:5, fridayBuildTo:10",
             self.source,
         )
 

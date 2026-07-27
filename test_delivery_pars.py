@@ -25,11 +25,14 @@ class DeliveryParConfigurationTests(unittest.TestCase):
         expected = {
             "burger patties": (3, 5),
             "chicken wings": (3, 7),
+            "double lobe chicken breasts": (3, 4),
             "flatbread dough": (3, 10),
             "fries": (5, 30),
             "milwaukee pretzel": (6, 20),
+            "pizza cheese": (5, 10),
             "potato hamburger bun": (2, 6),
             "tenders": (6, 10),
+            'tortilla, flour 12"': (5, 7),
         }
 
         actual = {

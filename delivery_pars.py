@@ -36,7 +36,7 @@ BASE_PAR_LEVELS = {
     "italian seasoning": 1.0,
     "hungarian style paprika": 1.0,
     "kosher salt": 1.0,
-    'tortilla, flour 12"': 2.0,
+    'tortilla, flour 12"': 7.0,
     "garlic parmesan": 9.0,
     "yellow mustard": 4.0,
     "ketchup packets": 3.0,
@@ -122,16 +122,23 @@ BASE_PAR_LEVELS = {
     "aluminum 1/3 pans": 4.0,
 }
 
+# Usage-based values use the peak of six completed service windows from the
+# June 8-July 26, 2026 GoTab exports. Wrap ingredients use 1 tortilla and
+# 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
+# or pepperoni pizza. Tortillas and cheese receive the established 25% build
+# factor; chicken converts cooked portions to raw purchasing weight at 80%
+# yield before rounding to 12-count tortilla packs or 5-pound bags.
 TUESDAY_PAR_OVERRIDES = {
     "burger patties": 3.0,
     "chicken wings": 3.0,
-    "double lobe chicken breasts": 4.0,
+    "double lobe chicken breasts": 3.0,
     "flatbread dough": 3.0,
     "fries": 5.0,
     "milwaukee pretzel": 6.0,
+    "pizza cheese": 5.0,
     "potato hamburger bun": 2.0,
     "tenders": 6.0,
-    'tortilla, flour 12"': 2.0,
+    'tortilla, flour 12"': 5.0,
 }
 
 FRIDAY_PAR_OVERRIDES = {
@@ -141,9 +148,10 @@ FRIDAY_PAR_OVERRIDES = {
     "flatbread dough": 10.0,
     "fries": 30.0,
     "milwaukee pretzel": 20.0,
+    "pizza cheese": 10.0,
     "potato hamburger bun": 6.0,
     "tenders": 10.0,
-    'tortilla, flour 12"': 2.0,
+    'tortilla, flour 12"': 7.0,
 }
 
 DELIVERY_PARS = {

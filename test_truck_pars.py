@@ -87,6 +87,14 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 10,
                 "preferred_vendor_id": 2,
             },
+            {
+                "id": 104,
+                "name": "Pizza Cheese",
+                "category_id": 6,
+                "pack_size": "6/5 LB",
+                "par_level": 10,
+                "preferred_vendor_id": 2,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -111,11 +119,12 @@ class TruckParTests(unittest.TestCase):
         items = self.load_items("tuesday")
         expected = {
             "burger patties": 3,
-            "double lobe chicken breasts": 4,
+            "double lobe chicken breasts": 3,
             "potato hamburger bun": 2,
             "fries": 5,
             "flatbread dough": 3,
             "milwaukee pretzel": 6,
+            "pizza cheese": 5,
             "tenders": 6,
         }
         for name, par in expected.items():
@@ -131,6 +140,7 @@ class TruckParTests(unittest.TestCase):
             "fries": 30,
             "flatbread dough": 10,
             "milwaukee pretzel": 20,
+            "pizza cheese": 10,
             "tenders": 10,
         }
         for name, par in expected.items():
@@ -140,16 +150,16 @@ class TruckParTests(unittest.TestCase):
     def test_tuesday_truck_keeps_six_inch_tortillas_event_driven(self):
         items = self.load_items("tuesday")
 
-        self.assertEqual(items['tortilla, flour 12"']["par_level"], 2)
+        self.assertEqual(items['tortilla, flour 12"']["par_level"], 5)
         self.assertTrue(items['tortilla, flour 6"']["event_driven"])
         self.assertEqual(items['tortilla, flour 6"']["par_level"], 0)
         self.assertEqual(items['tortilla, flour 6"']["order_qty"], 0)
 
-    def test_tuesday_truck_uses_four_twenty_pound_case_double_lobe_par(self):
+    def test_tuesday_truck_uses_three_bag_double_lobe_par(self):
         chicken = self.load_items("tuesday")["double lobe chicken breasts"]
 
-        self.assertEqual(chicken["par_level"], 4)
-        self.assertEqual(chicken["order_qty"], 4)
+        self.assertEqual(chicken["par_level"], 3)
+        self.assertEqual(chicken["order_qty"], 3)
 
 
 if __name__ == "__main__":

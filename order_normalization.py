@@ -9,11 +9,12 @@ DISPOSABLES_CATEGORY_ID = 5
 
 ITEM_COUNT_UNITS = {
     "american slices 120 ct": "5-pound pack",
-    "double lobe chicken breasts": "20-pound case",
+    "double lobe chicken breasts": "5-pound bag",
     "parmesan cheese": "5-pound bag",
     "pecorino romano blend": "5-pound bag",
     "pizza cheese": "5-pound bag",
     "ranch dressing": "gallon",
+    'tortilla, flour 12"': "12-count pack",
 }
 
 DRY_STOCK_COUNT_UNITS = {
@@ -224,11 +225,9 @@ def units_per_case(item, pricing):
             return quantity / (5.0 * OUNCES_PER_POUND)
         return None
 
-    if count_unit == "20-pound case":
-        if basis == "lb":
-            return quantity / 20.0
-        if basis == "oz":
-            return quantity / (20.0 * OUNCES_PER_POUND)
+    if count_unit == "12-count pack":
+        if basis == "each":
+            return quantity / 12.0
         return None
 
     if count_unit == "1/2-gallon jar":

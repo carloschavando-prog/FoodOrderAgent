@@ -352,7 +352,7 @@ const CATEGORIES = [
   {
     id:"tortillas", name:"Tortilla Shelf", icon:"🫓",
     items:[
-      {id:17, name:'Tortilla, Flour 12"',        buildTo:2,  tuesdayBuildTo:2, fridayBuildTo:2, vendor:"US FOODS", price:29.53, unit:"8/12"},
+      {id:17, name:'Tortilla, Flour 12"',        buildTo:7,  tuesdayBuildTo:5, fridayBuildTo:7, vendor:"US FOODS", price:29.53, unit:"8/12", countUnit:"12-count pack"},
       {id:18, name:'Tortilla, Flour 6"',         buildTo:null,eventDriven:true, vendor:"US FOODS", price:30.66, unit:"12/24"},
     ]
   },
@@ -410,7 +410,7 @@ const CATEGORIES = [
       {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
       {id:79, name:"Burger Patties",             buildTo:5,  tuesdayBuildTo:3, fridayBuildTo:5, vendor:"PFG", price:64.22, unit:"48/4 OZ"},
-      {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  tuesdayBuildTo:4, fridayBuildTo:4, vendor:"US FOODS", price:94.75, unit:"4/5 LB", countUnit:"20-pound case"},
+      {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  tuesdayBuildTo:3, fridayBuildTo:4, vendor:"US FOODS", price:94.75, unit:"4/5 LB", countUnit:"5-pound bag"},
       {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, vendor:"US FOODS", price:51.38, unit:"40 LB"},
       {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
       {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
@@ -424,7 +424,7 @@ const CATEGORIES = [
       {id:98, name:"Sliced Red Onions",          buildTo:2,  vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
       {id:99, name:"Diced Tomatoes",             buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
       {id:43, name:"Diced Red Onions",           buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
-      {id:104,name:"Pizza Cheese",               buildTo:10, vendor:"PFG",        price:95.69,  unit:"6/5 LB",     countUnit:"5-pound bag"},
+      {id:104,name:"Pizza Cheese",               buildTo:10, tuesdayBuildTo:5, fridayBuildTo:10, vendor:"PFG", price:95.69, unit:"6/5 LB", countUnit:"5-pound bag"},
       {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
       {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL", countUnit:"gallon"},
       {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
@@ -486,11 +486,21 @@ const CATEGORIES = [
 
 // ── State ──────────────────────────────────────────────
 const STATE_KEY = 'kitchen_order_v1';
+const COUNT_UNIT_MIGRATION_KEY = 'kitchen_order_count_units_v2';
 let state = {};
 let sectionObserver = null;
 
 function loadState(){
-  try{ const s = localStorage.getItem(STATE_KEY); if(s) state = JSON.parse(s); }catch(e){}
+  try{
+    const s=localStorage.getItem(STATE_KEY);
+    if(s) state=JSON.parse(s);
+    if(localStorage.getItem(COUNT_UNIT_MIGRATION_KEY)!=='done'){
+      delete state[17];
+      delete state[81];
+      localStorage.setItem(STATE_KEY,JSON.stringify(state));
+      localStorage.setItem(COUNT_UNIT_MIGRATION_KEY,'done');
+    }
+  }catch(e){}
 }
 function saveState(){ try{ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }catch(e){} }
 function getOnHand(id){ return state[id] !== undefined ? state[id] : ''; }
@@ -765,7 +775,11 @@ async function loadSharedSnapshot(opts={}){
 
     const counts=data.counts || {};
     const byName={};
+    const rowsByName={};
     Object.keys(counts).forEach(name=>{ byName[normalizeName(name)]=counts[name]; });
+    (data.items || []).forEach(row=>{
+      if(row && row.item_name) rowsByName[normalizeName(row.item_name)]=row;
+    });
 
     const nextState={};
     for(const cat of CATEGORIES){
@@ -773,6 +787,10 @@ async function loadSharedSnapshot(opts={}){
         const names=[item.name].concat(item.aliases || []);
         const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
         const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
+        const savedRow=matchedName===undefined ? undefined : rowsByName[normalizeName(matchedName)];
+        const expectedUnit=normalizeName(item.countUnit || 'case');
+        const savedUnit=normalizeName(savedRow && savedRow.unit);
+        if(savedUnit && savedUnit!==expectedUnit) continue;
         if(val!==undefined && val!==null && val!==''){
           nextState[item.id]=parseFloat(val);
         }

@@ -51,7 +51,7 @@ ITEMS = [
   ("Hungarian Style Paprika",    2, "18 OZ",      1,  1),
   ("Kosher Salt",                2, "12/3 LB",    1,  1),
   # Tortilla Shelf (cat 3)
-  ('Tortilla, Flour 12"',        3, "8/12",       2,  1),
+  ('Tortilla, Flour 12"',        3, "8/12",       7,  1),
   ('Tortilla, Flour 6"',         3, "12/24",   None,  1),
   # Dry Stock (cat 4)
   ("Garlic Parmesan",            4, "2/1 GAL",    9,  2),
