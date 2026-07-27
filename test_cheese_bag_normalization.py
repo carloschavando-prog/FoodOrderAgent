@@ -14,7 +14,11 @@ class CheeseBagNormalizationTests(unittest.TestCase):
         return item
 
     def test_cheese_inventory_counts_five_pound_bags(self):
-        for name in ("Pecorino Romano Blend", "Parmesan Cheese"):
+        for name in (
+            "Pecorino Romano Blend",
+            "Parmesan Cheese",
+            "Pizza Cheese",
+        ):
             with self.subTest(name=name):
                 self.assertEqual(
                     count_unit_for_item(self._item(name)),
@@ -41,6 +45,17 @@ class CheeseBagNormalizationTests(unittest.TestCase):
         }
 
         self.assertEqual(units_per_case(item, pricing), 2)
+        self.assertEqual(cases_required(item, pricing), 2)
+
+    def test_pizza_cheese_par_requires_two_six_bag_cases(self):
+        item = self._item("Pizza Cheese", order_qty=10)
+        pricing = {
+            "pack_size": "6/5 LB",
+            "unit_basis": "lb",
+            "unit_quantity": 30,
+        }
+
+        self.assertEqual(units_per_case(item, pricing), 6)
         self.assertEqual(cases_required(item, pricing), 2)
 
 

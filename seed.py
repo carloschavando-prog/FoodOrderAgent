@@ -111,7 +111,7 @@ ITEMS = [
   ("Sliced Red Onions",          6, "2/5 LB",     2,  1),
   ("Diced Tomatoes",             6, "2/5 LB",     2,  4),
   ("Diced Red Onions",           6, "2/5 LB",     2,  4),
-  ("Pizza Cheese",               6, "6/5 LB",     3,  2),
+  ("Pizza Cheese",               6, "6/5 LB",    10,  2),
   ("Caesar Dressing",            6, "4/1 GAL",    3,  1),
   ("Ranch Dressing",             6, "4/1 GAL",    8,  1),
   ("Sour Cream",                 6, "4/5 LB",  None,  1),

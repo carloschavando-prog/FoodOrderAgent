@@ -12,6 +12,7 @@ ITEM_COUNT_UNITS = {
     "double lobe chicken breasts": "20-pound case",
     "parmesan cheese": "5-pound bag",
     "pecorino romano blend": "5-pound bag",
+    "pizza cheese": "5-pound bag",
     "ranch dressing": "gallon",
 }
 
