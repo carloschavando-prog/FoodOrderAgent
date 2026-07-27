@@ -102,6 +102,8 @@ TRUCK_PAR_OVERRIDES = {
         "fries": 5.0,
         "milwaukee pretzel": 6.0,
         "potato hamburger bun": 2.0,
+        'tortilla, flour 12"': 2.0,
+        'tortilla, flour 6"': 1.0,
     },
     "friday": {
         "chicken wings": 7.0,
@@ -111,6 +113,14 @@ TRUCK_PAR_OVERRIDES = {
         "potato hamburger bun": 6.0,
     },
 }
+
+INVENTORY_NAME_ALIASES = {
+    "napkins c fold": "napkins xpressnap",
+}
+
+def canonical_inventory_name(name):
+    normalized = name.lower().strip()
+    return INVENTORY_NAME_ALIASES.get(normalized, normalized)
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
@@ -157,13 +167,16 @@ def save_inventory_snapshot(on_hand, canonical_items):
         snapshot_id = snap[0]["id"]
 
         # 2. Build name → canonical item_id map
-        name_to_id = {ci["name"].lower().strip(): ci["id"] for ci in canonical_items}
+        name_to_id = {
+            canonical_inventory_name(ci["name"]): ci["id"]
+            for ci in canonical_items
+        }
 
         # 3. Build item rows
         snap_items = [
             {
                 "snapshot_id": snapshot_id,
-                "item_id":     name_to_id.get(name),
+                "item_id":     name_to_id.get(canonical_inventory_name(name)),
                 "item_name":   name,
                 "on_hand_qty": qty,
             }
@@ -190,6 +203,15 @@ def load_data(on_hand, truck_cycle="friday"):
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
     Returns canonical_items list + best_prices dict
     """
+    normalized_on_hand = {}
+    for name, qty in on_hand.items():
+        canonical_name = canonical_inventory_name(name)
+        if (
+            canonical_name not in normalized_on_hand
+            or name.lower().strip() == canonical_name
+        ):
+            normalized_on_hand[canonical_name] = qty
+
     raw_items = sb_get_all(
         "items?select=id,name,category_id,pack_size,par_level,"
         "preferred_vendor_id&order=id.asc"
@@ -214,7 +236,7 @@ def load_data(on_hand, truck_cycle="friday"):
             cycle_par if cycle_par is not None else default_par
         )
 
-        oh = on_hand.get(lower_name)
+        oh = normalized_on_hand.get(lower_name)
         if event_driven:
             qty = 0.0
         elif oh is not None:
@@ -1024,6 +1046,9 @@ function closeOrderModal(){
   var sb=document.getElementById('submit-btn');
   if(sb) sb.disabled=false;
 }
+function getOrderEndpoint(vid){
+  return new URL(ORDER_ENDPOINTS[vid], document.baseURI).href;
+}
 async function submitOrders(){
   var btn=document.getElementById('submit-btn');
   if(btn) btn.disabled=true;
@@ -1043,7 +1068,7 @@ async function submitOrders(){
     var items=ORDER_DATA[vid];
     var row=document.getElementById('vs-'+vid);
     try{
-      var resp=await fetch(ORDER_ENDPOINTS[vid],{
+      var resp=await fetch(getOrderEndpoint(vid),{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({items:items})

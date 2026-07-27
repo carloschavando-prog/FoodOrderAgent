@@ -13,6 +13,15 @@ class OrderReportOriginTests(unittest.TestCase):
             source,
         )
 
+    def test_report_resolves_each_order_endpoint_to_an_absolute_url(self):
+        source = pathlib.Path("api/generate_order.py").read_text()
+
+        self.assertIn(
+            "return new URL(ORDER_ENDPOINTS[vid], document.baseURI).href;",
+            source,
+        )
+        self.assertIn("fetch(getOrderEndpoint(vid),{", source)
+
 
 if __name__ == "__main__":
     unittest.main()

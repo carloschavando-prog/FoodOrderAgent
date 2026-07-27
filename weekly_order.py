@@ -103,6 +103,14 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "tater tots",
 }
 
+INVENTORY_NAME_ALIASES = {
+    "napkins c fold": "napkins xpressnap",
+}
+
+def canonical_inventory_name(name):
+    normalized = name.lower().strip()
+    return INVENTORY_NAME_ALIASES.get(normalized, normalized)
+
 # Contracted dish-machine chemicals must stay with US Foods even when another
 # broadliner has a lower price for a similarly named product.
 REQUIRED_VENDOR_BY_ITEM = {
@@ -139,6 +147,17 @@ def load_data(on_hand=None):
     When provided, order_qty = max(0, ceil(par_level - on_hand))
     When None, order_qty = par_level  (standard par-cycle run)
     """
+    normalized_on_hand = None
+    if on_hand is not None:
+        normalized_on_hand = {}
+        for name, qty in on_hand.items():
+            canonical_name = canonical_inventory_name(name)
+            if (
+                canonical_name not in normalized_on_hand
+                or name.lower().strip() == canonical_name
+            ):
+                normalized_on_hand[canonical_name] = qty
+
     print("→ Loading items...")
     raw_items = sb_get_all("items?select=id,name,category_id,pack_size,par_level,"
                            "preferred_vendor_id&order=id.asc")
@@ -160,8 +179,8 @@ def load_data(on_hand=None):
         par = 0.0 if event_driven else float(item.get("par_level") or 0)
         if event_driven:
             qty = 0.0
-        elif on_hand is not None:
-            oh  = on_hand.get(item["name"].lower().strip())
+        elif normalized_on_hand is not None:
+            oh = normalized_on_hand.get(lower_name)
             if oh is not None:
                 qty = max(0.0, math.ceil(par - float(oh)))
             else:

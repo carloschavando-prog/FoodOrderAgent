@@ -47,6 +47,22 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 20,
                 "preferred_vendor_id": 1,
             },
+            {
+                "id": 17,
+                "name": 'Tortilla, Flour 12"',
+                "category_id": 3,
+                "pack_size": "8/12",
+                "par_level": 5,
+                "preferred_vendor_id": 1,
+            },
+            {
+                "id": 18,
+                "name": 'Tortilla, Flour 6"',
+                "category_id": 3,
+                "pack_size": "12/24",
+                "par_level": 6,
+                "preferred_vendor_id": 1,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -90,6 +106,12 @@ class TruckParTests(unittest.TestCase):
         for name, par in expected.items():
             self.assertEqual(items[name]["par_level"], par)
             self.assertEqual(items[name]["order_qty"], par)
+
+    def test_tuesday_truck_uses_current_tortilla_pars(self):
+        items = self.load_items("tuesday")
+
+        self.assertEqual(items['tortilla, flour 12"']["par_level"], 2)
+        self.assertEqual(items['tortilla, flour 6"']["par_level"], 1)
 
 
 if __name__ == "__main__":
