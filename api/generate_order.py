@@ -86,7 +86,11 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "broccoli",
     "cherry tomatoes",
     "cucumbers",
+    "fajita chicken",
+    "jtm taco meat",
     "sour cream",
+    "tater kegs",
+    "tater tots",
 }
 
 # ── Supabase ──────────────────────────────────────────────────────────────────

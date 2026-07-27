@@ -94,7 +94,11 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "broccoli",
     "cherry tomatoes",
     "cucumbers",
+    "fajita chicken",
+    "jtm taco meat",
     "sour cream",
+    "tater kegs",
+    "tater tots",
 }
 
 # Contracted dish-machine chemicals must stay with US Foods even when another
