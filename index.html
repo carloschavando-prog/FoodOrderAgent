@@ -556,13 +556,11 @@ function renderCard(item){
   const parField = item.eventDriven
     ? '<div class="field-static event-status">Event-driven</div>'
     : `<div class="field-static">${buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
-  const countField = item.eventDriven
-    ? '<div class="field-static event-status">Not needed</div>'
-    : `<input type="number" min="0" step="0.5"
-        value="${oh}"
-        placeholder="–"
-        oninput="updateItem(${item.id},this.value)"
-        id="inp-${item.id}" />`;
+  const countField = `<input type="number" min="0" step="0.5"
+      value="${oh}"
+      placeholder="–"
+      oninput="updateItem(${item.id},this.value)"
+      id="inp-${item.id}" />`;
   return `
     <div class="item-card${needsOrder?' needs-order':''}" id="card-${item.id}">
       <div class="card-top">
@@ -594,9 +592,9 @@ function updateItem(id, val){
   if(!item) return;
 
   const oh = val==='' ? '' : parseFloat(val);
-  const qty = calcOrder(activeBuildTo(item), oh);
+  const qty = item.eventDriven ? 0 : calcOrder(activeBuildTo(item), oh);
   const needsOrder = qty!==null && qty>0;
-  const orderText = qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = item.eventDriven ? '0' : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
 
   document.getElementById(`oq-${id}`).textContent = orderText;
@@ -613,9 +611,9 @@ function updateStats(){
   for(const cat of CATEGORIES){
     let catNeed=0;
     for(const item of cat.items){
-      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined){ uncounted++; continue; }
+      if(item.eventDriven){ stocked++; continue; }
       const qty=calcOrder(activeBuildTo(item), oh);
       if(qty>0){
         need++; catNeed++;
@@ -665,7 +663,6 @@ function collectCountRows(){
   const rows=[];
   for(const cat of CATEGORIES){
     for(const item of cat.items){
-      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh!=='' && oh!==undefined && oh!==null){
         rows.push({
@@ -750,7 +747,6 @@ async function loadSharedSnapshot(opts={}){
     const nextState={};
     for(const cat of CATEGORIES){
       for(const item of cat.items){
-        if(item.eventDriven) continue;
         const names=[item.name].concat(item.aliases || []);
         const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
         const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
@@ -789,6 +785,7 @@ function buildVendorPanel(){
   const vendorMap={};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
+      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined) continue;
       const qty=calcOrder(activeBuildTo(item), oh);
@@ -854,7 +851,6 @@ async function generateOrder(){
   const counts = {};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
-      if(item.eventDriven) continue;
       const oh = getOnHand(item.id);
       if(oh !== '' && oh !== undefined && oh !== null){
         counts[item.name] = parseFloat(oh);

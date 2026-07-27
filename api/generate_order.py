@@ -83,6 +83,7 @@ REQUIRED_VENDOR_BY_ITEM = {
 EVENT_DRIVEN_ITEM_NAMES = {
     "assorted peppers",
     "baby carrots",
+    "black beans",
     "broccoli",
     "cherry tomatoes",
     "cucumbers",
@@ -93,6 +94,7 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "sour cream",
     "tater kegs",
     "tater tots",
+    'tortilla, flour 6"',
     "variety dessert bars",
 }
 
@@ -105,7 +107,6 @@ TRUCK_PAR_OVERRIDES = {
         "milwaukee pretzel": 6.0,
         "potato hamburger bun": 2.0,
         'tortilla, flour 12"': 2.0,
-        'tortilla, flour 6"': 1.0,
     },
     "friday": {
         "chicken wings": 7.0,
@@ -168,9 +169,12 @@ def save_inventory_snapshot(on_hand, canonical_items):
             snap = json.loads(r.read())
         snapshot_id = snap[0]["id"]
 
-        # 2. Build name → canonical item_id map
-        name_to_id = {
-            canonical_inventory_name(ci["name"]): ci["id"]
+        # 2. Build the canonical item ID and inventory count-unit map.
+        item_details = {
+            canonical_inventory_name(ci["name"]): {
+                "id": ci["id"],
+                "unit": ci.get("count_unit") or "case",
+            }
             for ci in canonical_items
         }
 
@@ -178,9 +182,14 @@ def save_inventory_snapshot(on_hand, canonical_items):
         snap_items = [
             {
                 "snapshot_id": snapshot_id,
-                "item_id":     name_to_id.get(canonical_inventory_name(name)),
+                "item_id":     item_details.get(
+                    canonical_inventory_name(name), {}
+                ).get("id"),
                 "item_name":   name,
                 "on_hand_qty": qty,
+                "unit":        item_details.get(
+                    canonical_inventory_name(name), {}
+                ).get("unit", "case"),
             }
             for name, qty in on_hand.items()
         ]

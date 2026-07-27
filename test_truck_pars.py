@@ -115,11 +115,13 @@ class TruckParTests(unittest.TestCase):
             self.assertEqual(items[name]["par_level"], par)
             self.assertEqual(items[name]["order_qty"], par)
 
-    def test_tuesday_truck_uses_current_tortilla_pars(self):
+    def test_tuesday_truck_keeps_six_inch_tortillas_event_driven(self):
         items = self.load_items("tuesday")
 
         self.assertEqual(items['tortilla, flour 12"']["par_level"], 2)
-        self.assertEqual(items['tortilla, flour 6"']["par_level"], 1)
+        self.assertTrue(items['tortilla, flour 6"']["event_driven"])
+        self.assertEqual(items['tortilla, flour 6"']["par_level"], 0)
+        self.assertEqual(items['tortilla, flour 6"']["order_qty"], 0)
 
     def test_tuesday_truck_uses_four_case_double_lobe_par(self):
         chicken = self.load_items("tuesday")["double lobe chicken breasts"]

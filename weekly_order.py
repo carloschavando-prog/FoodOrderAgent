@@ -91,6 +91,7 @@ LOW_FILLER_SPEND_LIMIT = 50.0
 EVENT_DRIVEN_ITEM_NAMES = {
     "assorted peppers",
     "baby carrots",
+    "black beans",
     "broccoli",
     "cherry tomatoes",
     "cucumbers",
@@ -101,6 +102,7 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "sour cream",
     "tater kegs",
     "tater tots",
+    'tortilla, flour 6"',
     "variety dessert bars",
 }
 
