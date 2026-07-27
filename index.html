@@ -173,6 +173,7 @@
       display:flex;align-items:baseline;gap:4px;min-width:0;
       font-size:20px;font-weight:700;color:#4c666b;line-height:1.1;
     }
+    .field-static.event-status{font-size:12px;line-height:1.2}
     .field-unit{font-size:10px;font-weight:700;line-height:1.05;color:#65797d}
     .order-qty{font-size:20px;font-weight:700;line-height:1.1}
     .order-qty.positive{color:var(--red)}
@@ -399,17 +400,17 @@ const CATEGORIES = [
   {
     id:"walkin", name:"Walk-In Cooler", icon:"❄️",
     items:[
-      {id:72, name:"Baby Carrots",               buildTo:1,  vendor:"US FOODS",   price:27.90,  unit:"4/5 LB"},
-      {id:73, name:"Broccoli",                   buildTo:3,  vendor:"PFG",        price:35.89,  unit:"20 LB"},
+      {id:72, name:"Baby Carrots",               buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.90, unit:"4/5 LB"},
+      {id:73, name:"Broccoli",                   buildTo:null,eventDriven:true, vendor:"PFG",      price:35.89, unit:"20 LB"},
       {id:74, name:"Green Onions",               buildTo:2,  vendor:"US FOODS",   price:23.37,  unit:"4/2 LB"},
-      {id:75, name:"Cucumbers",                  buildTo:1,  vendor:"PFG",        price:10.32,  unit:"12 EA"},
+      {id:75, name:"Cucumbers",                  buildTo:null,eventDriven:true, vendor:"PFG",      price:10.32, unit:"12 EA"},
       {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
       {id:79, name:"Burger Patties",             buildTo:5,  vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
       {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  vendor:"US FOODS",   price:94.75,  unit:"4/5 LB"},
       {id:82, name:"Chicken Wings",              buildTo:7,  vendor:"US FOODS",   price:51.38,  unit:"40 LB"},
-      {id:83, name:"Assorted Peppers",           buildTo:1,  vendor:"US FOODS",   price:22.63,  unit:"5 LB"},
-      {id:84, name:"Cherry Tomatoes",            buildTo:1,  vendor:"US FOODS",   price:27.92,  unit:"10 LB"},
+      {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
+      {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
       {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#"},
       {id:92, name:"Pecorino Romano Blend",      buildTo:1,  vendor:"PFG",        price:110.05, unit:"4/5 LB"},
       {id:93, name:"Parmesan Cheese",            buildTo:1,  vendor:"US FOODS",   price:63.98,  unit:"2/5 LB"},
@@ -423,7 +424,7 @@ const CATEGORIES = [
       {id:104,name:"Pizza Cheese",               buildTo:3,  vendor:"PFG",        price:95.69,  unit:"6/5 LB"},
       {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
       {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL"},
-      {id:110,name:"Sour Cream",                 buildTo:2,  vendor:"US FOODS",   price:34.58,  unit:"4/5 LB"},
+      {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
       {id:111,name:"Pickles",                    buildTo:1,  vendor:"PFG",        price:35.68,  unit:"5 GAL"},
       {id:112,name:"Bacon Toppings",             buildTo:2,  vendor:"US FOODS",   price:82.59,  unit:"2/5 LB"},
       {id:113,name:"Sliced Bacon",               buildTo:3,  vendor:"PFG",        price:76.44,  unit:"15 LB"},
@@ -535,10 +536,20 @@ function renderContent(){
 
 function renderCard(item){
   const oh = getOnHand(item.id);
-  const qty = calcOrder(item.buildTo, oh);
+  const qty = item.eventDriven ? 0 : calcOrder(item.buildTo, oh);
   const needsOrder = qty !== null && qty > 0;
-  const orderText = qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = item.eventDriven ? '0' : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
+  const parField = item.eventDriven
+    ? '<div class="field-static event-status">Event-driven</div>'
+    : `<div class="field-static">${item.buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
+  const countField = item.eventDriven
+    ? '<div class="field-static event-status">Not needed</div>'
+    : `<input type="number" min="0" step="0.5"
+        value="${oh}"
+        placeholder="–"
+        oninput="updateItem(${item.id},this.value)"
+        id="inp-${item.id}" />`;
   return `
     <div class="item-card${needsOrder?' needs-order':''}" id="card-${item.id}">
       <div class="card-top">
@@ -548,17 +559,11 @@ function renderCard(item){
       <div class="card-fields">
         <div class="field">
           <div class="field-label">PAR</div>
-          <div class="field-static">
-            ${item.buildTo}<span class="field-unit">${countUnitLabel(item)}</span>
-          </div>
+          ${parField}
         </div>
         <div class="field">
           <div class="field-label">On Hand</div>
-          <input type="number" min="0" step="0.5"
-            value="${oh}"
-            placeholder="–"
-            oninput="updateItem(${item.id},this.value)"
-            id="inp-${item.id}" />
+          ${countField}
         </div>
         <div class="field">
           <div class="field-label">Order</div>
@@ -595,6 +600,7 @@ function updateStats(){
   for(const cat of CATEGORIES){
     let catNeed=0;
     for(const item of cat.items){
+      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined){ uncounted++; continue; }
       const qty=calcOrder(item.buildTo, oh);
@@ -646,6 +652,7 @@ function collectCountRows(){
   const rows=[];
   for(const cat of CATEGORIES){
     for(const item of cat.items){
+      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh!=='' && oh!==undefined && oh!==null){
         rows.push({
@@ -730,6 +737,7 @@ async function loadSharedSnapshot(opts={}){
     const nextState={};
     for(const cat of CATEGORIES){
       for(const item of cat.items){
+        if(item.eventDriven) continue;
         const names=[item.name].concat(item.aliases || []);
         const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
         const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
@@ -804,7 +812,10 @@ function resetAll(){
       const inp=document.getElementById(`inp-${item.id}`);
       if(inp) inp.value='';
       const oq=document.getElementById(`oq-${item.id}`);
-      if(oq){ oq.textContent='–'; oq.className='order-qty empty'; }
+      if(oq){
+        oq.textContent=item.eventDriven ? '0' : '–';
+        oq.className=item.eventDriven ? 'order-qty zero' : 'order-qty empty';
+      }
       const card=document.getElementById(`card-${item.id}`);
       if(card) card.className='item-card';
     }
@@ -830,6 +841,7 @@ async function generateOrder(){
   const counts = {};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
+      if(item.eventDriven) continue;
       const oh = getOnHand(item.id);
       if(oh !== '' && oh !== undefined && oh !== null){
         counts[item.name] = parseFloat(oh);

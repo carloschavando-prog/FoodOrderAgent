@@ -80,6 +80,15 @@ REQUIRED_VENDOR_BY_ITEM = {
     "heavy duty rinse additive": 1,
 }
 
+EVENT_DRIVEN_ITEM_NAMES = {
+    "assorted peppers",
+    "baby carrots",
+    "broccoli",
+    "cherry tomatoes",
+    "cucumbers",
+    "sour cream",
+}
+
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
 def sb_get(path):
@@ -175,10 +184,13 @@ def load_data(on_hand):
         ids.sort()
         can_id = ids[0]
         item   = id_to_item[can_id]
-        par    = float(item.get("par_level") or 0)
+        event_driven = lower_name in EVENT_DRIVEN_ITEM_NAMES
+        par = 0.0 if event_driven else float(item.get("par_level") or 0)
 
         oh = on_hand.get(lower_name)
-        if oh is not None:
+        if event_driven:
+            qty = 0.0
+        elif oh is not None:
             qty = max(0.0, math.ceil(par - float(oh)))
         else:
             qty = par  # uncounted → full par
@@ -191,6 +203,7 @@ def load_data(on_hand):
             "pack_size":     item.get("pack_size") or "",
             "par_level":     par,
             "order_qty":     qty,
+            "event_driven":  event_driven,
             "count_unit":    count_unit_for_item(item),
             "preferred_vid": item.get("preferred_vendor_id"),
         })

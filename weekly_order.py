@@ -88,6 +88,15 @@ FILLER_CAPS_BY_CATEGORY = {
 MIN_RESCUE_SAVINGS = 25.0
 LOW_FILLER_SPEND_LIMIT = 50.0
 
+EVENT_DRIVEN_ITEM_NAMES = {
+    "assorted peppers",
+    "baby carrots",
+    "broccoli",
+    "cherry tomatoes",
+    "cucumbers",
+    "sour cream",
+}
+
 # Contracted dish-machine chemicals must stay with US Foods even when another
 # broadliner has a lower price for a similarly named product.
 REQUIRED_VENDOR_BY_ITEM = {
@@ -141,8 +150,11 @@ def load_data(on_hand=None):
         ids.sort()
         can_id = ids[0]
         item   = id_to_item[can_id]
-        par = float(item.get("par_level") or 0)
-        if on_hand is not None:
+        event_driven = lower_name in EVENT_DRIVEN_ITEM_NAMES
+        par = 0.0 if event_driven else float(item.get("par_level") or 0)
+        if event_driven:
+            qty = 0.0
+        elif on_hand is not None:
             oh  = on_hand.get(item["name"].lower().strip())
             if oh is not None:
                 qty = max(0.0, math.ceil(par - float(oh)))
@@ -159,6 +171,7 @@ def load_data(on_hand=None):
             "pack_size":     item.get("pack_size") or "",
             "par_level":     par,
             "order_qty":     qty,
+            "event_driven":  event_driven,
             "count_unit":    count_unit_for_item(item),
             "preferred_vid": item.get("preferred_vendor_id"),
         })
