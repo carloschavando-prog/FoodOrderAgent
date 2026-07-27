@@ -881,7 +881,12 @@ async function generateOrder(){
     } else {
       // API returns full HTML — open it in a new tab via Blob URL
       const html = await resp.text();
-      const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+      const reportBase = new URL('/', resp.url).href;
+      const reportHtml = html.replace(
+        /<head>/i,
+        `<head><base href="${reportBase}">`
+      );
+      const blob = new Blob([reportHtml], {type:'text/html;charset=utf-8'});
       const url  = URL.createObjectURL(blob);
       window.open(url, '_blank');
       showToast('✅ Weekly order generated!');
