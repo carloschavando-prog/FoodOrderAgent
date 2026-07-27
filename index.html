@@ -170,10 +170,10 @@
     .field{display:flex;flex-direction:column;gap:3px}
     .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0;color:#65797d}
     .field-static{
-      display:flex;align-items:baseline;gap:4px;white-space:nowrap;
+      display:flex;align-items:baseline;gap:4px;min-width:0;
       font-size:20px;font-weight:700;color:#4c666b;line-height:1.1;
     }
-    .field-unit{font-size:11px;font-weight:700;color:#65797d}
+    .field-unit{font-size:10px;font-weight:700;line-height:1.05;color:#65797d}
     .order-qty{font-size:20px;font-weight:700;line-height:1.1}
     .order-qty.positive{color:var(--red)}
     .order-qty.zero{color:var(--green)}
@@ -355,26 +355,26 @@ const CATEGORIES = [
   {
     id:"drystock", name:"Dry Stock", icon:"🏪",
     items:[
-      {id:19, name:"Garlic Parmesan",            buildTo:9,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL"},
-      {id:20, name:"Yellow Mustard",             buildTo:4,  vendor:"PFG",        price:18.20,  unit:"4/1 GAL"},
-      {id:24, name:"Ketchup Packets",            buildTo:3,  vendor:"PFG",        price:23.25,  unit:"1000/9G"},
-      {id:25, name:"Mustard Packets",            buildTo:3,  vendor:"PFG",        price:15.00,  unit:"500/7G"},
-      {id:27, name:"Mayo Packets",               buildTo:3,  vendor:"PFG",        price:46.72,  unit:"500/9G"},
-      {id:29, name:"Golden Sauce",               buildTo:15, vendor:"SYSCO",      price:null,   unit:"2/1 GAL"},
-      {id:30, name:"Blended Oil",                buildTo:5,  vendor:"US FOODS",   price:99.87,  unit:"4/1 GAL"},
-      {id:31, name:"Olive Oil",                  buildTo:1,  vendor:"PFG",        price:130.51, unit:"10 L"},
-      {id:33, name:"Buffalo Sauce",              buildTo:3,  vendor:"PFG",        price:71.25,  unit:"4/1 GAL"},
-      {id:34, name:"Pizza Sauce",                buildTo:6,  vendor:"PFG",        price:42.88,  unit:"6/#10"},
-      {id:37, name:"Bulk Sugar",                 buildTo:1,  vendor:"US FOODS",   price:35.53,  unit:"8/5 LB"},
-      {id:38, name:"BBQ Sauce",                  buildTo:4,  vendor:"PFG",        price:58.39,  unit:"4/1 GAL"},
-      {id:41, name:"Maraschino Cherries",        buildTo:3,  vendor:"US FOODS",   price:88.04,  unit:"6/½ GAL"},
-      {id:42, name:"Cholula",                    buildTo:1,  vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ"},
-      {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G"},
-      {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL"},
-      {id:47, name:"Fire Roasted Salsa",         buildTo:8,  vendor:"US FOODS",   price:53.28,  unit:"4/68 OZ"},
-      {id:50, name:"Black Beans",                buildTo:3,  vendor:"PFG",        price:91.25,  unit:"24/15.5oz"},
-      {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB"},
-      {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB"},
+      {id:19, name:"Garlic Parmesan",            buildTo:9,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL",    countUnit:"gallon"},
+      {id:20, name:"Yellow Mustard",             buildTo:4,  vendor:"PFG",        price:18.20,  unit:"4/1 GAL",    countUnit:"gallon"},
+      {id:24, name:"Ketchup Packets",            buildTo:3,  vendor:"PFG",        price:23.25,  unit:"1000/9G",    countUnit:"case"},
+      {id:25, name:"Mustard Packets",            buildTo:3,  vendor:"PFG",        price:15.00,  unit:"500/7G",     countUnit:"case"},
+      {id:27, name:"Mayo Packets",               buildTo:3,  vendor:"PFG",        price:46.72,  unit:"500/9G",     countUnit:"case"},
+      {id:29, name:"OPE Sauce", aliases:["Golden Sauce"], buildTo:15, vendor:"SYSCO", price:null, unit:"2/1 GAL", countUnit:"gallon"},
+      {id:30, name:"Blended Oil",                buildTo:5,  vendor:"US FOODS",   price:99.87,  unit:"4/1 GAL",    countUnit:"gallon"},
+      {id:31, name:"Olive Oil",                  buildTo:1,  vendor:"PFG",        price:130.51, unit:"10 L",       countUnit:"10-liter box"},
+      {id:33, name:"Buffalo Sauce",              buildTo:3,  vendor:"PFG",        price:71.25,  unit:"4/1 GAL",    countUnit:"gallon"},
+      {id:34, name:"Pizza Sauce",                buildTo:6,  vendor:"PFG",        price:42.88,  unit:"6/#10",      countUnit:"#10 can"},
+      {id:37, name:"Bulk Sugar",                 buildTo:1,  vendor:"US FOODS",   price:35.53,  unit:"8/5 LB",     countUnit:"5-pound bag"},
+      {id:38, name:"BBQ Sauce",                  buildTo:4,  vendor:"PFG",        price:58.39,  unit:"4/1 GAL",    countUnit:"gallon"},
+      {id:41, name:"Maraschino Cherries",        buildTo:3,  vendor:"US FOODS",   price:88.04,  unit:"6/½ GAL",    countUnit:"1/2-gallon jar"},
+      {id:42, name:"Cholula",                    buildTo:1,  vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ",    countUnit:"each"},
+      {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G",     countUnit:"case"},
+      {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL",    countUnit:"gallon"},
+      {id:47, name:"Fire Roasted Salsa",         buildTo:8,  vendor:"US FOODS",   price:53.28,  unit:"4/68 OZ",    countUnit:"each"},
+      {id:50, name:"Black Beans",                buildTo:3,  vendor:"PFG",        price:91.25,  unit:"24/15.5oz",  countUnit:"#10 can"},
+      {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB",      countUnit:"case"},
+      {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB",   countUnit:"bag"},
     ]
   },
   {
@@ -504,7 +504,9 @@ function calcOrder(buildTo, raw){
 
 function countUnitLabel(item){
   const unit=item.countUnit || 'case';
-  return item.buildTo===1 || unit!=='case' ? unit : 'cases';
+  if(item.buildTo===1 || unit==='each') return unit;
+  if(unit.endsWith('box')) return unit.slice(0,-3)+'boxes';
+  return unit+'s';
 }
 
 // ── Render sidebar ──────────────────────────────────────
@@ -650,7 +652,7 @@ function collectCountRows(){
           id:item.id,
           name:item.name,
           category:cat.name,
-          unit:item.unit || 'case',
+          unit:item.countUnit || 'case',
           on_hand:parseFloat(oh),
         });
       }
@@ -728,7 +730,9 @@ async function loadSharedSnapshot(opts={}){
     const nextState={};
     for(const cat of CATEGORIES){
       for(const item of cat.items){
-        const val=byName[normalizeName(item.name)];
+        const names=[item.name].concat(item.aliases || []);
+        const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
+        const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
         if(val!==undefined && val!==null && val!==''){
           nextState[item.id]=parseFloat(val);
         }
