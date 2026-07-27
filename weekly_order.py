@@ -35,6 +35,7 @@ from order_normalization import (
     pricing_matches_item_requirements,
     units_per_case,
 )
+from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, par_for_delivery
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SB_URL = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -88,24 +89,6 @@ FILLER_CAPS_BY_CATEGORY = {
 MIN_RESCUE_SAVINGS = 25.0
 LOW_FILLER_SPEND_LIMIT = 50.0
 
-EVENT_DRIVEN_ITEM_NAMES = {
-    "assorted peppers",
-    "baby carrots",
-    "black beans",
-    "broccoli",
-    "cherry tomatoes",
-    "cucumbers",
-    "fajita chicken",
-    "fire roasted salsa",
-    "jtm taco meat",
-    "mild cheddar cheese",
-    "sour cream",
-    "tater kegs",
-    "tater tots",
-    'tortilla, flour 6"',
-    "variety dessert bars",
-}
-
 INVENTORY_NAME_ALIASES = {
     "napkins c fold": "napkins xpressnap",
 }
@@ -144,7 +127,7 @@ def sb_get_all(path, page_size=1000):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_data(on_hand=None):
+def load_data(on_hand=None, truck_cycle="friday"):
     """
     on_hand: optional dict {item_name_lower: on_hand_float}
     When provided, order_qty = max(0, ceil(par_level - on_hand))
@@ -179,7 +162,8 @@ def load_data(on_hand=None):
         can_id = ids[0]
         item   = id_to_item[can_id]
         event_driven = lower_name in EVENT_DRIVEN_ITEM_NAMES
-        par = 0.0 if event_driven else float(item.get("par_level") or 0)
+        configured_par = par_for_delivery(lower_name, truck_cycle)
+        par = 0.0 if event_driven or configured_par is None else configured_par
         if event_driven:
             qty = 0.0
         elif normalized_on_hand is not None:
@@ -1177,6 +1161,13 @@ def main():
              "When provided, order quantities = max(0, PAR - on_hand). "
              "Without this flag, order quantities = full PAR level."
     )
+    parser.add_argument(
+        "--truck-cycle",
+        choices=("tuesday", "friday"),
+        default="friday" if datetime.date.today().weekday() == 3 else "tuesday",
+        help="Delivery PAR set to use. Defaults to Friday only on Thursday; "
+             "otherwise defaults to Tuesday.",
+    )
     args = parser.parse_args()
 
     on_hand = None
@@ -1191,7 +1182,7 @@ def main():
     print("  On Par — Weekly Food Order Generator")
     print("═══════════════════════════════════════════════════")
 
-    canonical_items, best_prices = load_data(on_hand)
+    canonical_items, best_prices = load_data(on_hand, args.truck_cycle)
 
     print("\n→ Running basket optimizer...")
     assignment, dropped, unassigned, notes, filler_cases = optimize_basket(canonical_items, best_prices)

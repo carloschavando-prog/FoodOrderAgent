@@ -352,7 +352,7 @@ const CATEGORIES = [
   {
     id:"tortillas", name:"Tortilla Shelf", icon:"🫓",
     items:[
-      {id:17, name:'Tortilla, Flour 12"',        buildTo:2,  vendor:"US FOODS",   price:29.53,  unit:"8/12"},
+      {id:17, name:'Tortilla, Flour 12"',        buildTo:2,  tuesdayBuildTo:2, fridayBuildTo:2, vendor:"US FOODS", price:29.53, unit:"8/12"},
       {id:18, name:'Tortilla, Flour 6"',         buildTo:null,eventDriven:true, vendor:"US FOODS", price:30.66, unit:"12/24"},
     ]
   },
@@ -409,8 +409,8 @@ const CATEGORIES = [
       {id:75, name:"Cucumbers",                  buildTo:null,eventDriven:true, vendor:"PFG",      price:10.32, unit:"12 EA"},
       {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
-      {id:79, name:"Burger Patties",             buildTo:5,  vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
-      {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  vendor:"US FOODS",   price:94.75,  unit:"4/5 LB"},
+      {id:79, name:"Burger Patties",             buildTo:5,  tuesdayBuildTo:3, fridayBuildTo:5, vendor:"PFG", price:64.22, unit:"48/4 OZ"},
+      {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  tuesdayBuildTo:4, fridayBuildTo:4, vendor:"US FOODS", price:94.75, unit:"4/5 LB", countUnit:"20-pound case"},
       {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, vendor:"US FOODS", price:51.38, unit:"40 LB"},
       {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
       {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
@@ -443,7 +443,7 @@ const CATEGORIES = [
       {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, vendor:"PFG",      price:63.16, unit:"2/5 LB"},
       {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
       {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, vendor:"US FOODS", price:74.17, unit:"4/5 LB"},
-      {id:122,name:"Tenders",                    buildTo:10, vendor:"PFG",        price:32.98,  unit:"2/5 LB"},
+      {id:122,name:"Tenders",                    buildTo:10, tuesdayBuildTo:6, fridayBuildTo:10, vendor:"PFG", price:32.98, unit:"2/5 LB"},
       {id:125,name:"Milwaukee Pretzel",          buildTo:20, tuesdayBuildTo:6, fridayBuildTo:20, vendor:"US FOODS", price:58.25, unit:"8/24 OZ"},
       {id:128,name:"Tater Kegs",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:41.37, unit:"10 LB"},
       {id:236,name:"Variety Dessert Bars",       buildTo:null,eventDriven:true, vendor:"SYSCO ONLY", price:null, unit:"8/8 CT"},
@@ -495,6 +495,22 @@ function loadState(){
 function saveState(){ try{ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }catch(e){} }
 function getOnHand(id){ return state[id] !== undefined ? state[id] : ''; }
 function normalizeName(name){ return String(name || '').toLowerCase().trim().replace(/\s+/g,' '); }
+
+function buildDeliveryPars(){
+  const pars={tuesday:{},friday:{}};
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      if(item.eventDriven) continue;
+      const key=normalizeName(item.name);
+      pars.tuesday[key]=item.tuesdayBuildTo ?? item.buildTo;
+      pars.friday[key]=item.fridayBuildTo ?? item.buildTo;
+    }
+  }
+  return pars;
+}
+
+const DELIVERY_PARS=buildDeliveryPars();
+
 function hasLocalCounts(){ return Object.keys(state).length > 0; }
 function setOnHand(id, val){
   if(val===''||val===null){ delete state[id]; } else { state[id]=parseFloat(val); }
@@ -518,9 +534,8 @@ function currentCycleLabel(date=new Date()){
 }
 
 function activeBuildTo(item){
-  const cycle=currentTruckCycle();
-  const cyclePar=item[`${cycle}BuildTo`];
-  return cyclePar===undefined ? item.buildTo : cyclePar;
+  if(item.eventDriven) return null;
+  return DELIVERY_PARS[currentTruckCycle()][normalizeName(item.name)];
 }
 
 function countUnitLabel(item){

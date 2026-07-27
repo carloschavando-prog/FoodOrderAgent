@@ -71,6 +71,22 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 8,
                 "preferred_vendor_id": 1,
             },
+            {
+                "id": 79,
+                "name": "Burger Patties",
+                "category_id": 6,
+                "pack_size": "48/4 OZ",
+                "par_level": 5,
+                "preferred_vendor_id": 2,
+            },
+            {
+                "id": 122,
+                "name": "Tenders",
+                "category_id": 7,
+                "pack_size": "2/5 LB",
+                "par_level": 10,
+                "preferred_vendor_id": 2,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -94,10 +110,13 @@ class TruckParTests(unittest.TestCase):
     def test_tuesday_truck_uses_calculated_freezer_pars(self):
         items = self.load_items("tuesday")
         expected = {
+            "burger patties": 3,
+            "double lobe chicken breasts": 4,
             "potato hamburger bun": 2,
             "fries": 5,
             "flatbread dough": 3,
             "milwaukee pretzel": 6,
+            "tenders": 6,
         }
         for name, par in expected.items():
             self.assertEqual(items[name]["par_level"], par)
@@ -106,10 +125,13 @@ class TruckParTests(unittest.TestCase):
     def test_friday_truck_preserves_existing_freezer_pars(self):
         items = self.load_items("friday")
         expected = {
+            "burger patties": 5,
+            "double lobe chicken breasts": 4,
             "potato hamburger bun": 6,
             "fries": 30,
             "flatbread dough": 10,
             "milwaukee pretzel": 20,
+            "tenders": 10,
         }
         for name, par in expected.items():
             self.assertEqual(items[name]["par_level"], par)
@@ -123,7 +145,7 @@ class TruckParTests(unittest.TestCase):
         self.assertEqual(items['tortilla, flour 6"']["par_level"], 0)
         self.assertEqual(items['tortilla, flour 6"']["order_qty"], 0)
 
-    def test_tuesday_truck_uses_four_case_double_lobe_par(self):
+    def test_tuesday_truck_uses_four_twenty_pound_case_double_lobe_par(self):
         chicken = self.load_items("tuesday")["double lobe chicken breasts"]
 
         self.assertEqual(chicken["par_level"], 4)

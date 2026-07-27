@@ -25,7 +25,7 @@ class InventoryAliasTests(unittest.TestCase):
         self.assertEqual(items[0]["par_level"], 7)
         self.assertEqual(items[0]["order_qty"], 0)
 
-    def test_database_only_item_does_not_order_full_par(self):
+    def test_database_only_item_has_no_configured_par_or_order(self):
         item_rows = [
             {
                 "id": 236,
@@ -42,7 +42,7 @@ class InventoryAliasTests(unittest.TestCase):
         ):
             items, _ = generate_order.load_data({})
 
-        self.assertEqual(items[0]["par_level"], 6)
+        self.assertEqual(items[0]["par_level"], 0)
         self.assertEqual(items[0]["order_qty"], 0)
 
 

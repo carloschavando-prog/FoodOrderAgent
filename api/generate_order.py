@@ -25,6 +25,7 @@ from order_normalization import (
     pricing_matches_item_requirements,
     units_per_case,
 )
+from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, par_for_delivery
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -78,43 +79,6 @@ REQUIRED_VENDOR_BY_ITEM = {
     "pot & pan detergent": 1,
     "pre soak": 1,
     "heavy duty rinse additive": 1,
-}
-
-EVENT_DRIVEN_ITEM_NAMES = {
-    "assorted peppers",
-    "baby carrots",
-    "black beans",
-    "broccoli",
-    "cherry tomatoes",
-    "cucumbers",
-    "fajita chicken",
-    "fire roasted salsa",
-    "jtm taco meat",
-    "mild cheddar cheese",
-    "sour cream",
-    "tater kegs",
-    "tater tots",
-    'tortilla, flour 6"',
-    "variety dessert bars",
-}
-
-TRUCK_PAR_OVERRIDES = {
-    "tuesday": {
-        "chicken wings": 3.0,
-        "double lobe chicken breasts": 4.0,
-        "flatbread dough": 3.0,
-        "fries": 5.0,
-        "milwaukee pretzel": 6.0,
-        "potato hamburger bun": 2.0,
-        'tortilla, flour 12"': 2.0,
-    },
-    "friday": {
-        "chicken wings": 7.0,
-        "flatbread dough": 10.0,
-        "fries": 30.0,
-        "milwaukee pretzel": 20.0,
-        "potato hamburger bun": 6.0,
-    },
 }
 
 INVENTORY_NAME_ALIASES = {
@@ -241,11 +205,8 @@ def load_data(on_hand, truck_cycle="friday"):
         can_id = ids[0]
         item   = id_to_item[can_id]
         event_driven = lower_name in EVENT_DRIVEN_ITEM_NAMES
-        default_par = float(item.get("par_level") or 0)
-        cycle_par = TRUCK_PAR_OVERRIDES.get(truck_cycle, {}).get(lower_name)
-        par = 0.0 if event_driven else (
-            cycle_par if cycle_par is not None else default_par
-        )
+        configured_par = par_for_delivery(lower_name, truck_cycle)
+        par = 0.0 if event_driven or configured_par is None else configured_par
 
         oh = normalized_on_hand.get(lower_name)
         if event_driven:

@@ -22,6 +22,34 @@ class OrderCycleUiTests(unittest.TestCase):
         self.assertIn("Thursday Order · Friday Delivery", self.source)
         self.assertIn("Tuesday Delivery", self.source)
 
+    def test_frontend_builds_complete_delivery_par_sets(self):
+        self.assertIn("const DELIVERY_PARS=buildDeliveryPars();", self.source)
+        self.assertIn(
+            "return DELIVERY_PARS[currentTruckCycle()][normalizeName(item.name)];",
+            self.source,
+        )
+        self.assertNotIn(
+            "return cyclePar===undefined ? item.buildTo : cyclePar;",
+            self.source,
+        )
+
+    def test_previously_missing_tuesday_pars_are_explicit(self):
+        self.assertIn(
+            'name:"Burger Patties",             buildTo:5,  '
+            "tuesdayBuildTo:3, fridayBuildTo:5",
+            self.source,
+        )
+        self.assertIn(
+            'name:"Double Lobe Chicken Breasts",buildTo:4,  '
+            "tuesdayBuildTo:4, fridayBuildTo:4",
+            self.source,
+        )
+        self.assertIn(
+            'name:"Tenders",                    buildTo:10, '
+            "tuesdayBuildTo:6, fridayBuildTo:10",
+            self.source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
