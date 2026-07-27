@@ -93,6 +93,15 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "tater tots",
 }
 
+TRUCK_PAR_OVERRIDES = {
+    "tuesday": {
+        "chicken wings": 3.0,
+    },
+    "friday": {
+        "chicken wings": 7.0,
+    },
+}
+
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
 def sb_get(path):
@@ -166,7 +175,7 @@ def save_inventory_snapshot(on_hand, canonical_items):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_data(on_hand):
+def load_data(on_hand, truck_cycle="friday"):
     """
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
     Returns canonical_items list + best_prices dict
@@ -189,7 +198,11 @@ def load_data(on_hand):
         can_id = ids[0]
         item   = id_to_item[can_id]
         event_driven = lower_name in EVENT_DRIVEN_ITEM_NAMES
-        par = 0.0 if event_driven else float(item.get("par_level") or 0)
+        default_par = float(item.get("par_level") or 0)
+        cycle_par = TRUCK_PAR_OVERRIDES.get(truck_cycle, {}).get(lower_name)
+        par = 0.0 if event_driven else (
+            cycle_par if cycle_par is not None else default_par
+        )
 
         oh = on_hand.get(lower_name)
         if event_driven:
@@ -1095,15 +1108,22 @@ class handler(BaseHTTPRequestHandler):
             self._err(400, f"Bad JSON: {e}")
             return
 
+        if isinstance(raw.get("counts"), dict):
+            count_source = raw["counts"]
+            truck_cycle = str(raw.get("truckCycle") or "friday").lower()
+        else:
+            count_source = raw
+            truck_cycle = "friday"
+
         # Normalise keys to lowercase
         on_hand = {
             k.lower().strip(): float(v)
-            for k, v in raw.items()
+            for k, v in count_source.items()
             if v != "" and v is not None
         }
 
         try:
-            canonical_items, best_prices = load_data(on_hand)
+            canonical_items, best_prices = load_data(on_hand, truck_cycle)
             save_inventory_snapshot(on_hand, canonical_items)   # persist count for food cost
             assignment, dropped, unassigned, notes, filler_cases = optimize_basket(canonical_items, best_prices)
             savings_rows, total_saved = compute_savings(assignment, canonical_items, best_prices)

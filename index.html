@@ -408,7 +408,7 @@ const CATEGORIES = [
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
       {id:79, name:"Burger Patties",             buildTo:5,  vendor:"PFG",        price:64.22,  unit:"48/4 OZ"},
       {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  vendor:"US FOODS",   price:94.75,  unit:"4/5 LB"},
-      {id:82, name:"Chicken Wings",              buildTo:7,  vendor:"US FOODS",   price:51.38,  unit:"40 LB"},
+      {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, vendor:"US FOODS", price:51.38, unit:"40 LB"},
       {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
       {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
       {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#"},
@@ -503,9 +503,20 @@ function calcOrder(buildTo, raw){
   return Math.max(0, Math.ceil(buildTo - parseFloat(raw)));
 }
 
+function currentTruckCycle(date=new Date()){
+  const day=date.getDay();
+  return day>=2 && day<=4 ? 'friday' : 'tuesday';
+}
+
+function activeBuildTo(item){
+  const cycle=currentTruckCycle();
+  const cyclePar=item[`${cycle}BuildTo`];
+  return cyclePar===undefined ? item.buildTo : cyclePar;
+}
+
 function countUnitLabel(item){
   const unit=item.countUnit || 'case';
-  if(item.buildTo===1 || unit==='each') return unit;
+  if(activeBuildTo(item)===1 || unit==='each') return unit;
   if(unit.endsWith('box')) return unit.slice(0,-3)+'boxes';
   return unit+'s';
 }
@@ -536,13 +547,14 @@ function renderContent(){
 
 function renderCard(item){
   const oh = getOnHand(item.id);
-  const qty = item.eventDriven ? 0 : calcOrder(item.buildTo, oh);
+  const buildTo=activeBuildTo(item);
+  const qty = item.eventDriven ? 0 : calcOrder(buildTo, oh);
   const needsOrder = qty !== null && qty > 0;
   const orderText = item.eventDriven ? '0' : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
   const parField = item.eventDriven
     ? '<div class="field-static event-status">Event-driven</div>'
-    : `<div class="field-static">${item.buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
+    : `<div class="field-static">${buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
   const countField = item.eventDriven
     ? '<div class="field-static event-status">Not needed</div>'
     : `<input type="number" min="0" step="0.5"
@@ -581,7 +593,7 @@ function updateItem(id, val){
   if(!item) return;
 
   const oh = val==='' ? '' : parseFloat(val);
-  const qty = calcOrder(item.buildTo, oh);
+  const qty = calcOrder(activeBuildTo(item), oh);
   const needsOrder = qty!==null && qty>0;
   const orderText = qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
@@ -603,7 +615,7 @@ function updateStats(){
       if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined){ uncounted++; continue; }
-      const qty=calcOrder(item.buildTo, oh);
+      const qty=calcOrder(activeBuildTo(item), oh);
       if(qty>0){
         need++; catNeed++;
         vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
@@ -778,7 +790,7 @@ function buildVendorPanel(){
     for(const item of cat.items){
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined) continue;
-      const qty=calcOrder(item.buildTo, oh);
+      const qty=calcOrder(activeBuildTo(item), oh);
       if(qty>0){
         if(!vendorMap[item.vendor]) vendorMap[item.vendor]=[];
         vendorMap[item.vendor].push({...item, orderQty:qty});
@@ -857,7 +869,10 @@ async function generateOrder(){
     const resp = await fetch('/api/generate_order', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(counts),
+      body: JSON.stringify({
+        counts,
+        truckCycle:currentTruckCycle(),
+      }),
     });
 
     if(!resp.ok){
@@ -888,7 +903,8 @@ updateStats();
 loadSharedSnapshot();
 
 document.getElementById('dateLabel').textContent =
-  new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) +
+  ` · ${currentTruckCycle()==='tuesday'?'Tuesday':'Friday'} truck`;
 
 // Highlight active sidebar section on scroll
 function observeSections(){
