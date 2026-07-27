@@ -28,6 +28,13 @@ Usage:
 import json, math, os, re, sys, webbrowser, datetime, urllib.request, argparse
 from collections import defaultdict
 
+from order_normalization import (
+    cases_required,
+    count_unit_for_item,
+    extended_cost,
+    units_per_case,
+)
+
 # ── Config ────────────────────────────────────────────────────────────────────
 SB_URL = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
@@ -151,6 +158,7 @@ def load_data(on_hand=None):
             "pack_size":     item.get("pack_size") or "",
             "par_level":     par,
             "order_qty":     qty,
+            "count_unit":    count_unit_for_item(item),
             "preferred_vid": item.get("preferred_vendor_id"),
         })
     # Sort by category, then name
@@ -158,7 +166,9 @@ def load_data(on_hand=None):
 
     # Reverse map: any item_id → canonical_id
     id_to_canonical = {}
+    canonical_by_id = {}
     for ci in canonical_items:
+        canonical_by_id[ci["id"]] = ci
         for iid in ci["all_ids"]:
             id_to_canonical[iid] = ci["id"]
 
@@ -167,7 +177,8 @@ def load_data(on_hand=None):
     # Load all pricing (broadliners only), newest price wins per (canonical_id, vendor_id)
     print("→ Loading pricing...")
     all_pricing = sb_get_all(
-        "pricing?select=item_id,vendor_id,apn,price,price_list_id"
+        "pricing?select=item_id,vendor_id,apn,price,price_list_id,"
+        "pack_size,unit_basis,unit_quantity,unit_note"
         "&order=price_list_id.asc"
     )
     print(f"  {len(all_pricing)} total rows")
@@ -184,7 +195,20 @@ def load_data(on_hand=None):
             continue
         iid    = row["item_id"]
         can_id = id_to_canonical.get(iid, iid)
-        best_prices[can_id][vid] = {"price": float(price), "apn": apn}
+        item = canonical_by_id.get(can_id)
+        if item is None:
+            continue
+        pricing = {
+            "price": float(price),
+            "apn": apn,
+            "pack_size": row.get("pack_size") or "",
+            "unit_basis": row.get("unit_basis"),
+            "unit_quantity": row.get("unit_quantity"),
+            "unit_note": row.get("unit_note") or "",
+        }
+        pricing["units_per_case"] = units_per_case(item, pricing)
+        if pricing["units_per_case"] is not None:
+            best_prices[can_id][vid] = pricing
 
     # Summary
     for vid in BROADLINER_IDS:
@@ -232,7 +256,9 @@ def assign_cheapest(canonical_items, best_prices, active):
             if ci["id"] in best_prices and v in best_prices[ci["id"]]
         }
         if opts:
-            assignment[ci["id"]] = min(opts, key=lambda v: opts[v]["price"])
+            assignment[ci["id"]] = min(
+                opts, key=lambda v: extended_cost(ci, opts[v])
+            )
     return assignment
 
 def filler_cap(item):
@@ -282,6 +308,7 @@ def calc_totals(assignment, items_by_id, best_prices, filler_cases=None):
             entry["filler_cases"] += filler_qty
             entry["subtotal"] = round(entry["cases"] * price, 2)
         else:
+            units_per = pdata.get("units_per_case", 1.0)
             entry = {
                 "item":     item,
                 "cases":    cases,
@@ -290,6 +317,7 @@ def calc_totals(assignment, items_by_id, best_prices, filler_cases=None):
                 "subtotal": round(cases * price, 2),
                 "base_cases": cases - filler_qty,
                 "filler_cases": filler_qty,
+                "units_per_case": units_per,
             }
             vendor_items[vid].append(entry)
             entry_index[key] = entry
@@ -298,7 +326,9 @@ def calc_totals(assignment, items_by_id, best_prices, filler_cases=None):
 
     for can_id, vid in assignment.items():
         item  = items_by_id[can_id]
-        cases = int(item["order_qty"]) if item["order_qty"] > 0 else 1
+        cases = cases_required(item, best_prices[can_id][vid])
+        if cases is None:
+            continue
         add_entry(can_id, vid, cases, 0)
 
     for (can_id, vid), extra_cases in (filler_cases or {}).items():
@@ -572,7 +602,6 @@ def compute_savings(assignment, canonical_items, best_prices):
 
     for can_id, vid in assignment.items():
         item   = items_by_id[can_id]
-        cases  = int(item["order_qty"]) if item["order_qty"] > 0 else 1
         prices = best_prices.get(can_id, {})
         required_vid = required_vendor(item)
         if required_vid is not None:
@@ -583,24 +612,37 @@ def compute_savings(assignment, canonical_items, best_prices):
         if not prices:
             continue
 
+        paid_cases = cases_required(item, prices[vid])
+        if paid_cases is None:
+            continue
         paid_price = prices[vid]["price"]
+        paid_total = paid_cases * paid_price
         all_prices = {v: d["price"] for v, d in prices.items()}
-        max_price  = max(all_prices.values())
-        min_price  = min(all_prices.values())
-        max_vendor = max(all_prices, key=all_prices.get)
+        all_cases = {v: cases_required(item, d) for v, d in prices.items()}
+        all_totals = {
+            v: all_cases[v] * d["price"]
+            for v, d in prices.items()
+            if all_cases[v] is not None
+        }
+        max_vendor = max(all_totals, key=all_totals.get)
+        max_price = prices[max_vendor]["price"]
+        max_total = all_totals[max_vendor]
 
-        saved_vs_worst = round((max_price - paid_price) * cases, 2)
+        saved_vs_worst = round(max_total - paid_total, 2)
         total_saved   += saved_vs_worst
 
         rows.append({
             "item":         item,
-            "cases":        cases,
+            "cases":        paid_cases,
             "chosen_vid":   vid,
             "paid_price":   paid_price,
             "max_price":    max_price,
             "max_vendor":   max_vendor,
+            "paid_total":   paid_total,
+            "max_total":    max_total,
             "saved":        saved_vs_worst,
             "all_prices":   all_prices,
+            "all_cases":    all_cases,
             "competing":    len(all_prices) > 1,
         })
 
@@ -739,6 +781,22 @@ td.save-zero { color: var(--muted); }
 
 def fmt_money(v):
     return f"${v:,.2f}"
+
+def fmt_qty(v):
+    return f"{v:,.0f}" if float(v).is_integer() else f"{v:,.2f}".rstrip("0").rstrip(".")
+
+def fmt_count_unit(unit, qty):
+    if qty == 1 or unit == "each":
+        return unit
+    return {
+        "10-liter box": "10-liter boxes",
+        "5-pound bag": "5-pound bags",
+        "1/2-gallon jar": "1/2-gallon jars",
+        "#10 can": "#10 cans",
+        "bag": "bags",
+        "gallon": "gallons",
+        "case": "cases",
+    }.get(unit, unit)
 
 def fmt_cases(n):
     return f"{n}"
@@ -912,10 +970,21 @@ def build_html(
                     f'({e.get("base_cases", 0)} base + {filler_qty} filler)</span>'
                     if filler_qty and e.get("base_cases", 0) else str(e["cases"])
                 )
+                coverage = ""
+                if item.get("count_unit") != "case":
+                    units_per = e.get("units_per_case") or 0
+                    base_cases = e.get("base_cases", 0)
+                    coverage = (
+                        f'<div style="color:var(--muted);font-size:.72rem">'
+                        f'Need {fmt_qty(item["order_qty"])} '
+                        f'{fmt_count_unit(item["count_unit"], item["order_qty"])}; '
+                        f'{fmt_qty(units_per)} per case; '
+                        f'{fmt_qty(base_cases * units_per)} covered</div>'
+                    )
                 html.append(f"""
       <tr>
         <td class="item-name">{item["name"]}{filler_badge}</td>
-        <td class="pack">{item["pack_size"]}</td>
+        <td class="pack">{item["pack_size"]}{coverage}</td>
         <td class="apn c">{e["apn"] or "—"}</td>
         <td class="c">{cases_text}</td>
         <td class="price r">{fmt_money(e["price"])}</td>
@@ -943,7 +1012,7 @@ def build_html(
     <thead><tr>
       <th>Item</th>
       <th>Pack</th>
-      <th class="c">Cases</th>
+      <th class="c">Need</th>
       <th>Preferred Vendor</th>
       <th class="c">Note</th>
     </tr></thead>
@@ -960,13 +1029,21 @@ def build_html(
             pref_vid  = ci["preferred_vid"]
             pref_name = (VENDOR_NAMES.get(pref_vid)
                          or other_vendors.get(pref_vid, f"Vendor {pref_vid}"))
-            cases = int(ci["order_qty"]) if ci["order_qty"] > 0 else "?"
-            note  = "No broadliner price on file"
+            needed = (
+                f'{fmt_qty(ci["order_qty"])} '
+                f'{fmt_count_unit(ci.get("count_unit", "case"), ci["order_qty"])}'
+                if ci["order_qty"] > 0 else "?"
+            )
+            note = (
+                "No compatible normalized case pack"
+                if ci.get("count_unit") != "case"
+                else "No broadliner price on file"
+            )
             html.append(f"""
       <tr>
         <td class="item-name">{ci["name"]}</td>
         <td class="pack">{ci["pack_size"]}</td>
-        <td class="c">{cases}</td>
+        <td class="c">{needed}</td>
         <td>{pref_name}</td>
         <td class="c" style="color:#856404;font-size:.75rem">{note}</td>
       </tr>""")
@@ -1003,7 +1080,7 @@ def build_html(
             price_chips = ""
             for v, p in sorted(r["all_prices"].items(), key=lambda x: x[1]):
                 d2, l2 = VENDOR_COLOR.get(v, ("#333", "#eee"))
-                chip_label = f"{VENDOR_ABBR[v]} {fmt_money(p)}"
+                chip_label = f'{VENDOR_ABBR[v]} {r["all_cases"][v]}×{fmt_money(p)}'
                 price_chips += _pill(chip_label, l2, d2)
 
             saved_td = (
@@ -1024,8 +1101,8 @@ def build_html(
       </tr>""")
 
         # Totals row
-        total_paid    = sum(r["cases"] * r["paid_price"] for r in competing)
-        total_max     = sum(r["cases"] * r["max_price"]  for r in competing)
+        total_paid = sum(r["paid_total"] for r in competing)
+        total_max = sum(r["max_total"] for r in competing)
         html.append(f"""
       <tr style="background:#f8f9fa;font-weight:700;border-top:2px solid #dee2e6">
         <td colspan="3">TOTAL  ({len(competing)} items with competing prices)</td>
