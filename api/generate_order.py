@@ -97,9 +97,17 @@ EVENT_DRIVEN_ITEM_NAMES = {
 TRUCK_PAR_OVERRIDES = {
     "tuesday": {
         "chicken wings": 3.0,
+        "flatbread dough": 3.0,
+        "fries": 5.0,
+        "milwaukee pretzel": 6.0,
+        "potato hamburger bun": 2.0,
     },
     "friday": {
         "chicken wings": 7.0,
+        "flatbread dough": 10.0,
+        "fries": 30.0,
+        "milwaukee pretzel": 20.0,
+        "potato hamburger bun": 6.0,
     },
 }
 
