@@ -111,6 +111,17 @@ class BlackFoamContainerTests(unittest.TestCase):
         self.assertIsNone(match_item(clear, "1054255", item_map))
         self.assertEqual(match_item(black, "2961092", item_map), 45)
 
+    def test_sysco_scraper_does_not_fuzzy_match_clear_cup(self):
+        item_map = {
+            "by_apn": {"7790658": 45},
+            "by_name": {"2 oz to-go cups": 45},
+        }
+        clear = "Cup Plastic Portion Translucent 2 Ounce"
+        black = "Cup Plastic Portion Black 2 Ounce"
+
+        self.assertIsNone(match_sysco_item(clear, "7790239", item_map))
+        self.assertEqual(match_sysco_item(black, "7790658", item_map), 45)
+
 
 if __name__ == "__main__":
     unittest.main()
