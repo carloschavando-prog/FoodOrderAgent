@@ -87,6 +87,7 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "cherry tomatoes",
     "cucumbers",
     "fajita chicken",
+    "fire roasted salsa",
     "jtm taco meat",
     "mild cheddar cheese",
     "sour cream",
