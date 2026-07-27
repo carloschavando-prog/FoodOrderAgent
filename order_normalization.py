@@ -64,6 +64,18 @@ def count_unit_for_item(item):
     return "case"
 
 
+def pricing_matches_item_requirements(item, pricing):
+    """Enforce product traits that are mandatory regardless of vendor price."""
+    name = item["name"].lower().strip()
+    if name != "styrofoam to-go containers":
+        return True
+    description = " ".join(
+        str(pricing.get(field) or "").lower()
+        for field in ("vendor_item_name", "unit_note")
+    )
+    return "black" in description and "white" not in description
+
+
 def _positive_quantity(pricing):
     try:
         quantity = float(pricing.get("unit_quantity"))

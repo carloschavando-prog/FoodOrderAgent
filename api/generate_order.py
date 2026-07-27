@@ -22,6 +22,7 @@ from order_normalization import (
     cases_required,
     count_unit_for_item,
     extended_cost,
+    pricing_matches_item_requirements,
     units_per_case,
 )
 
@@ -233,7 +234,10 @@ def load_data(on_hand):
             "vendor_item_name": row.get("vendor_item_name") or "",
         }
         pricing["units_per_case"] = units_per_case(item, pricing)
-        if pricing["units_per_case"] is not None:
+        if (
+            pricing["units_per_case"] is not None
+            and pricing_matches_item_requirements(item, pricing)
+        ):
             best_prices[can_id][vid] = pricing
 
     return canonical_items, dict(best_prices)

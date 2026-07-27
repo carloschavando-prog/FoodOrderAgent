@@ -114,17 +114,27 @@ def _word_overlap(a, b):
     longer  = wb if len(wa) <= len(wb) else wa
     return len(shorter & longer) / len(shorter)
 
+def _compatible_product(item_name, product_name):
+    """Reject catalog products that violate required item traits."""
+    item_key = (item_name or "").lower().strip()
+    product_key = (product_name or "").lower()
+    if item_key == "styrofoam to-go containers":
+        return "black" in product_key and "white" not in product_key
+    return True
+
 def match_item(name, apn, item_map):
     if apn and str(apn) in item_map["by_apn"]:
         return item_map["by_apn"][str(apn)]
     n = (name or "").lower().strip()
-    if n in item_map["by_name"]:
+    if n in item_map["by_name"] and _compatible_product(n, name):
         return item_map["by_name"][n]
     for k, v in item_map["by_name"].items():
-        if k in n or n in k:
+        if (k in n or n in k) and _compatible_product(k, name):
             return v
     best_score, best_id = 0.0, None
     for k, v in item_map["by_name"].items():
+        if not _compatible_product(k, name):
+            continue
         score = _word_overlap(n, k)
         if score > best_score:
             best_score, best_id = score, v
