@@ -178,7 +178,7 @@ def load_data(on_hand=None):
     print("→ Loading pricing...")
     all_pricing = sb_get_all(
         "pricing?select=item_id,vendor_id,apn,price,price_list_id,"
-        "pack_size,unit_basis,unit_quantity,unit_note"
+        "pack_size,unit_basis,unit_quantity,unit_note,vendor_item_name"
         "&order=price_list_id.asc"
     )
     print(f"  {len(all_pricing)} total rows")
@@ -205,6 +205,7 @@ def load_data(on_hand=None):
             "unit_basis": row.get("unit_basis"),
             "unit_quantity": row.get("unit_quantity"),
             "unit_note": row.get("unit_note") or "",
+            "vendor_item_name": row.get("vendor_item_name") or "",
         }
         pricing["units_per_case"] = units_per_case(item, pricing)
         if pricing["units_per_case"] is not None:
@@ -794,6 +795,8 @@ def fmt_count_unit(unit, qty):
         "1/2-gallon jar": "1/2-gallon jars",
         "#10 can": "#10 cans",
         "bag": "bags",
+        "box": "boxes",
+        "roll": "rolls",
         "gallon": "gallons",
         "case": "cases",
     }.get(unit, unit)

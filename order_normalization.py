@@ -1,10 +1,11 @@
-"""Dry-stock count-unit normalization for vendor case packs."""
+"""Inventory count-unit normalization for vendor case packs."""
 
 import math
 import re
 
 
 DRY_STOCK_CATEGORY_ID = 4
+DISPOSABLES_CATEGORY_ID = 5
 
 DRY_STOCK_COUNT_UNITS = {
     "garlic parmesan": "gallon",
@@ -30,16 +31,37 @@ DRY_STOCK_COUNT_UNITS = {
     "croutons": "bag",
 }
 
+DISPOSABLES_COUNT_UNITS = {
+    "styrofoam to-go containers": "case",
+    "can liners": "case",
+    "deli paper": "box",
+    "straws": "box",
+    "2 oz to-go cups": "case",
+    "2 oz lids": "case",
+    "foil sheets": "box",
+    "cutlery kits": "case",
+    "savaday": "case",
+    "save-a-day": "case",
+    "napkins c fold": "case",
+    "t-shirt bags": "case",
+    "plastic wrap": "roll",
+    "aluminum foil roll": "roll",
+    "pizza boxes": "case",
+}
+
 OUNCES_PER_GALLON = 128.0
 OUNCES_PER_LITER = 33.8140227
 OUNCES_PER_POUND = 16.0
 
 
 def count_unit_for_item(item):
-    """Return the inventory counting unit, scoped to Dry Stock only."""
-    if item.get("category_id") != DRY_STOCK_CATEGORY_ID:
-        return "case"
-    return DRY_STOCK_COUNT_UNITS.get(item["name"].lower().strip(), "case")
+    """Return the inventory counting unit for normalized categories."""
+    name = item["name"].lower().strip()
+    if item.get("category_id") == DRY_STOCK_CATEGORY_ID:
+        return DRY_STOCK_COUNT_UNITS.get(name, "case")
+    if item.get("category_id") == DISPOSABLES_CATEGORY_ID:
+        return DISPOSABLES_COUNT_UNITS.get(name, "case")
+    return "case"
 
 
 def _positive_quantity(pricing):
@@ -80,6 +102,41 @@ def _explicit_pack_count(pricing, marker):
     return float(match.group(1)) if match else None
 
 
+def _inner_pack_count(pricing):
+    """Read the number of inner boxes from a case pack such as 12/500."""
+    text = " ".join(
+        str(pricing.get(field) or "")
+        for field in ("pack_size", "unit_note")
+    )
+    match = re.search(r"(?:^|\s)(\d+(?:\.\d+)?)\s*/\s*\d+", text, re.I)
+    return float(match.group(1)) if match else None
+
+
+def _rolls_per_case(item, pricing):
+    expected_feet = {
+        "plastic wrap": 2000.0,
+        "aluminum foil roll": 1000.0,
+    }.get(item["name"].lower().strip())
+    if expected_feet is None or _basis(pricing) != "ft":
+        return None
+
+    # Reject a clearly different roll length even when stale normalization
+    # metadata claims the expected total footage.
+    product_text = " ".join(
+        str(pricing.get(field) or "")
+        for field in ("pack_size", "vendor_item_name")
+    )
+    explicit_lengths = [
+        float(value)
+        for value in re.findall(r"(\d+(?:\.\d+)?)\s*(?:ft|feet|')(?!\w)", product_text, re.I)
+    ]
+    if explicit_lengths and expected_feet not in explicit_lengths:
+        return None
+
+    quantity = _positive_quantity(pricing)
+    return quantity / expected_feet if quantity else None
+
+
 def units_per_case(item, pricing):
     """
     Convert one vendor case into the item's inventory counting unit.
@@ -90,6 +147,11 @@ def units_per_case(item, pricing):
     count_unit = item.get("count_unit") or count_unit_for_item(item)
     if count_unit == "case":
         return 1.0
+
+    if count_unit == "box":
+        pack_count = _inner_pack_count(pricing)
+        if pack_count:
+            return pack_count
 
     quantity = _positive_quantity(pricing)
     basis = _basis(pricing)
@@ -148,6 +210,20 @@ def units_per_case(item, pricing):
     if count_unit == "#10 can":
         pack_count = _explicit_pack_count(pricing, r"#?\s*10\b")
         return pack_count
+
+    if count_unit == "box":
+        inner_sizes = {
+            "deli paper": 500.0,
+            "straws": 500.0,
+            "foil sheets": 500.0,
+        }
+        inner_size = inner_sizes.get(item["name"].lower().strip())
+        if inner_size and basis == "each":
+            return quantity / inner_size
+        return None
+
+    if count_unit == "roll":
+        return _rolls_per_case(item, pricing)
 
     return None
 
