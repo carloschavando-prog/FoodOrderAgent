@@ -29,7 +29,7 @@ class InventoryAliasTests(unittest.TestCase):
         item_rows = [
             {
                 "id": 236,
-                "name": "Variety Dessert Bars",
+                "name": "Hidden Database Item",
                 "category_id": 7,
                 "pack_size": "8/8 CT",
                 "par_level": 6,

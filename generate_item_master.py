@@ -337,7 +337,7 @@ def build_html(canonical_items, vendor_apns):
             if apn:
                 cells.append(f'<td class="apn">{pill(apn, vid)}</td>')
             else:
-                cells.append('<td class="blank">—</td>')
+                cells.append('<td class="blank">Item not available</td>')
 
         parts.append(
             f'<tr class="{cls}">'

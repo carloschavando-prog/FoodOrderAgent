@@ -93,6 +93,7 @@ EVENT_DRIVEN_ITEM_NAMES = {
     "sour cream",
     "tater kegs",
     "tater tots",
+    "variety dessert bars",
 }
 
 TRUCK_PAR_OVERRIDES = {

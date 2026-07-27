@@ -294,7 +294,7 @@ def build_tsv(canonical_items, vendor_prices):
         for vid in VENDOR_IDS:
             data = prices.get(vid)
             if not data:
-                row.extend(["", "", "", "", ""])
+                row.extend(["Item not available", "", "", "", ""])
                 continue
             row.extend([
                 str(data.get("apn") or ""),
@@ -365,7 +365,9 @@ def build_html(canonical_items, vendor_prices):
         prices = vendor_prices.get(item["id"], {})
         n = len(prices)
         cells = "".join(
-            f'<td class="apn">{vendor_cell(prices[v], v)}</td>' if v in prices else '<td class="blank">-</td>'
+            f'<td class="apn">{vendor_cell(prices[v], v)}</td>'
+            if v in prices
+            else '<td class="blank">Item not available</td>'
             for v in VENDOR_IDS
         )
         h.append(

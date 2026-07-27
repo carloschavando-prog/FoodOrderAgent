@@ -5,6 +5,12 @@ from api import generate_order
 
 
 class EventDrivenItemTests(unittest.TestCase):
+    def test_variety_dessert_bars_are_event_driven(self):
+        self.assertIn(
+            "variety dessert bars",
+            generate_order.EVENT_DRIVEN_ITEM_NAMES,
+        )
+
     def test_event_driven_items_always_generate_zero_order_quantity(self):
         item_rows = [
             {
