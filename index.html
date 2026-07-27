@@ -92,6 +92,8 @@
     }
     .pill-red{background:var(--yellow-soft);color:#765f09;border:1px solid #dec653}
     .pill-muted{background:rgba(255,255,255,.7);color:var(--muted);border:1px solid #bdd4d6}
+    .cycle-pill{background:#fff;color:var(--accent);border:1px solid #8fb8bd}
+    .cycle-pill.friday{background:var(--yellow-soft);color:#765f09;border-color:#dec653}
     .vendor-pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 
     /* ── Layout ── */
@@ -297,6 +299,7 @@
 </header>
 
 <div class="stats-bar">
+  <div class="stat"><span class="stat-label">Order Cycle</span><span class="pill cycle-pill" id="cycleStatus"></span></div>
   <div class="stat"><span class="stat-label">Need to Order</span><span class="stat-value red" id="needCount">–</span></div>
   <div class="stat"><span class="stat-label">Stocked</span><span class="stat-value green" id="stockedCount">–</span></div>
   <div class="stat"><span class="stat-label">Not Counted</span><span class="stat-value" id="uncountedCount">–</span></div>
@@ -505,8 +508,13 @@ function calcOrder(buildTo, raw){
 }
 
 function currentTruckCycle(date=new Date()){
-  const day=date.getDay();
-  return day>=2 && day<=4 ? 'friday' : 'tuesday';
+  return date.getDay()===4 ? 'friday' : 'tuesday';
+}
+
+function currentCycleLabel(date=new Date()){
+  return currentTruckCycle(date)==='friday'
+    ? 'Thursday Order · Friday Delivery'
+    : 'Tuesday Delivery';
 }
 
 function activeBuildTo(item){
@@ -904,9 +912,12 @@ renderContent();
 updateStats();
 loadSharedSnapshot();
 
+const currentDate=new Date();
 document.getElementById('dateLabel').textContent =
-  new Date().toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}) +
-  ` · ${currentTruckCycle()==='tuesday'?'Tuesday':'Friday'} truck`;
+  currentDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+const cycleStatus=document.getElementById('cycleStatus');
+cycleStatus.textContent=currentCycleLabel(currentDate);
+cycleStatus.classList.toggle('friday',currentTruckCycle(currentDate)==='friday');
 
 // Highlight active sidebar section on scroll
 function observeSections(){
