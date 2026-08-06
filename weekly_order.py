@@ -103,6 +103,7 @@ REQUIRED_VENDOR_BY_ITEM = {
     "pot & pan detergent": 1,
     "pre soak": 1,
     "heavy duty rinse additive": 1,
+    "sanitizing floor cleaner": 1,
 }
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────

@@ -71,7 +71,7 @@ ITEMS = [
   ("Crushed Red Pepper Packets", 4, "200/1G",     2,  2),
   ("Premium Buttery Pan & Grill",4, "6/1 GAL",    3,  1),
   ("Fire Roasted Salsa",         4, "4/68 OZ", None,  1),
-  ("Black Beans",                4, "24/15.5oz",None,  2),
+  ("Black Beans",                4, "6/#10 CAN",None,  4),
   ("Shortening",                 4, "35 LB",     15,  1),
   ("Croutons",                   4, "4/2.5 LB",   3,  1),
   # Disposables (cat 5)
@@ -207,7 +207,7 @@ PRICES = [
   ("Premium Buttery Pan & Grill",2, None,      70.14, "6/1 GAL"),
   ("Fire Roasted Salsa",         1, "5576771",102.40, "4/68 OZ"),
   ("Fire Roasted Salsa",         2, None,      52.65, "4/68 OZ"),
-  ("Black Beans",                2, "KM806",   91.25, "24/15.5oz"),
+  ("Black Beans",                4, "557714",  30.91, "6/#10 CAN"),
   ("Shortening",                 1, "1328699", 30.38, "35 LB"),
   ("Shortening",                 2, None,      62.76, "35 LB"),
   ("Croutons",                   1, "3631189", 33.28, "4/2.5 LB"),

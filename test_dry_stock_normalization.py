@@ -88,6 +88,15 @@ class DryStockNormalizationTests(unittest.TestCase):
         self.assertEqual(units_per_case(pizza, pizza_price), 6)
         self.assertIsNone(units_per_case(beans, small_can_price))
 
+    def test_one_cherry_case_is_six_half_gallon_jars(self):
+        row = item("Maraschino Cherries", 6)
+        pricing = price(89.61, 384, pack_size="6/0.5 GAL")
+        pricing["units_per_case"] = units_per_case(row, pricing)
+
+        self.assertEqual(row["count_unit"], "1/2-gallon jar")
+        self.assertEqual(pricing["units_per_case"], 6)
+        self.assertEqual(cases_required(row, pricing), 1)
+
     def test_incompatible_weight_basis_is_not_used_for_gallons(self):
         row = item("Blended Oil", 5)
         weight_price = price(40, 35, "lb")

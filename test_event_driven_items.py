@@ -233,6 +233,10 @@ class EventDrivenItemTests(unittest.TestCase):
             self.index_source,
             r'name:"Fire Roasted Salsa"[^\n]+eventOrderQty:8',
         )
+        self.assertRegex(
+            self.index_source,
+            r'name:"Maraschino Cherries"[^\n]+eventOrderQty:6',
+        )
 
 
 if __name__ == "__main__":
