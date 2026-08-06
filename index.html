@@ -490,6 +490,9 @@ const STATE_KEY = 'kitchen_order_v1';
 const COUNT_UNIT_MIGRATION_KEY = 'kitchen_order_count_units_v2';
 let state = {};
 let sectionObserver = null;
+let sharedSnapshotId = null;
+let sharedSyncReady = false;
+let hasUnsavedChanges = false;
 
 function loadState(){
   try{
@@ -522,9 +525,9 @@ function buildDeliveryPars(){
 
 const DELIVERY_PARS=buildDeliveryPars();
 
-function hasLocalCounts(){ return Object.keys(state).length > 0; }
 function setOnHand(id, val){
   if(val===''||val===null){ delete state[id]; } else { state[id]=parseFloat(val); }
+  hasUnsavedChanges=true;
   saveState();
   setSaveStatus('Unsaved changes');
 }
@@ -669,11 +672,14 @@ function updateStats(){
   document.getElementById('stockedCount').textContent=stocked;
   document.getElementById('uncountedCount').textContent=uncounted;
 
-  // Enable "Generate Order" only when everything has been counted
+  // Never allow an order until this browser has checked the shared inventory.
   const genBtn = document.getElementById('generateBtn');
-  if(uncounted === 0){
+  if(!sharedSyncReady){
+    genBtn.setAttribute('disabled','');
+    genBtn.title = 'Checking the latest shared inventory before ordering';
+  } else if(uncounted === 0){
     genBtn.removeAttribute('disabled');
-    genBtn.title = 'All items counted — click to generate the weekly order';
+    genBtn.title = 'Inventory is synced and fully counted — click to generate the weekly order';
   } else {
     genBtn.setAttribute('disabled','');
     genBtn.title = `Fill in all on-hand counts first (${uncounted} remaining)`;
@@ -717,7 +723,7 @@ async function saveSharedSnapshot(){
   const rows=collectCountRows();
   if(!rows.length){
     showToast('Nothing to save yet.', true, 5000);
-    return;
+    return false;
   }
 
   btn.textContent='Saving…';
@@ -739,73 +745,94 @@ async function saveSharedSnapshot(){
     const when=data.snapshot && data.snapshot.taken_at
       ? new Date(data.snapshot.taken_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
       : 'now';
-    setSaveStatus(`Saved ${when}`);
+    sharedSnapshotId=data.snapshot && data.snapshot.id !== undefined
+      ? String(data.snapshot.id)
+      : sharedSnapshotId;
+    sharedSyncReady=true;
+    hasUnsavedChanges=false;
+    updateStats();
+    setSaveStatus(`Synced ${when}`);
     showToast(`Saved ${data.saved_count || rows.length} counts to shared inventory.`);
+    return true;
   }catch(e){
     setSaveStatus('Save failed', true);
     showToast('Save failed: '+e.message, true, 8000);
+    return false;
+  }finally{
+    btn.textContent='💾 Save Count';
+    btn.removeAttribute('disabled');
+  }
+}
+
+function snapshotTimeLabel(snapshot){
+  return snapshot && snapshot.taken_at
+    ? new Date(snapshot.taken_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    : 'available';
+}
+
+async function fetchSharedSnapshot(){
+  const resp=await fetch('/api/inventory_snapshot',{cache:'no-store'});
+  const data=await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+
+function applySharedSnapshot(data){
+  const counts=data.counts || {};
+  const byName={};
+  const rowsByName={};
+  Object.keys(counts).forEach(name=>{ byName[normalizeName(name)]=counts[name]; });
+  (data.items || []).forEach(row=>{
+    if(row && row.item_name) rowsByName[normalizeName(row.item_name)]=row;
+  });
+
+  const nextState={};
+  for(const cat of CATEGORIES){
+    for(const item of cat.items){
+      const names=[item.name].concat(item.aliases || []);
+      const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
+      const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
+      const savedRow=matchedName===undefined ? undefined : rowsByName[normalizeName(matchedName)];
+      const expectedUnit=normalizeName(item.countUnit || 'case');
+      const savedUnit=normalizeName(savedRow && savedRow.unit);
+      if(savedUnit && savedUnit!==expectedUnit) continue;
+      if(val!==undefined && val!==null && val!==''){
+        nextState[item.id]=parseFloat(val);
+      }
+    }
   }
 
-  btn.textContent='💾 Save Count';
-  btn.removeAttribute('disabled');
+  state=nextState;
+  sharedSnapshotId=String(data.snapshot.id);
+  sharedSyncReady=true;
+  hasUnsavedChanges=false;
+  saveState();
+  renderContent();
+  updateStats();
+  observeSections();
 }
 
 async function loadSharedSnapshot(opts={}){
   const force=!!opts.force;
   const btn=document.getElementById('loadSharedBtn');
   if(btn) btn.setAttribute('disabled','');
-  if(force) setSaveStatus('Loading…');
+  setSaveStatus(force ? 'Loading…' : 'Syncing…');
 
   try{
-    const resp=await fetch('/api/inventory_snapshot');
-    const data=await resp.json().catch(()=>({}));
-    if(!resp.ok) throw new Error(data.error || resp.statusText);
+    const data=await fetchSharedSnapshot();
     if(!data.snapshot){
+      sharedSyncReady=false;
+      updateStats();
       setSaveStatus('No shared count');
       return;
     }
 
-    const when=data.snapshot.taken_at
-      ? new Date(data.snapshot.taken_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
-      : 'available';
-
-    if(!force && hasLocalCounts()){
-      setSaveStatus(`Saved ${when}`);
-      return;
-    }
-
-    const counts=data.counts || {};
-    const byName={};
-    const rowsByName={};
-    Object.keys(counts).forEach(name=>{ byName[normalizeName(name)]=counts[name]; });
-    (data.items || []).forEach(row=>{
-      if(row && row.item_name) rowsByName[normalizeName(row.item_name)]=row;
-    });
-
-    const nextState={};
-    for(const cat of CATEGORIES){
-      for(const item of cat.items){
-        const names=[item.name].concat(item.aliases || []);
-        const matchedName=names.find(name=>byName[normalizeName(name)]!==undefined);
-        const val=matchedName===undefined ? undefined : byName[normalizeName(matchedName)];
-        const savedRow=matchedName===undefined ? undefined : rowsByName[normalizeName(matchedName)];
-        const expectedUnit=normalizeName(item.countUnit || 'case');
-        const savedUnit=normalizeName(savedRow && savedRow.unit);
-        if(savedUnit && savedUnit!==expectedUnit) continue;
-        if(val!==undefined && val!==null && val!==''){
-          nextState[item.id]=parseFloat(val);
-        }
-      }
-    }
-
-    state=nextState;
-    saveState();
-    renderContent();
-    updateStats();
-    observeSections();
-    setSaveStatus(`Loaded ${when}`);
+    applySharedSnapshot(data);
+    setSaveStatus(`Synced ${snapshotTimeLabel(data.snapshot)}`);
     if(force) showToast('Loaded the latest shared inventory count.');
   }catch(e){
+    sharedSyncReady=false;
+    updateStats();
     setSaveStatus('Load failed', true);
     if(force) showToast('Load failed: '+e.message, true, 8000);
   }finally{
@@ -858,7 +885,9 @@ function buildVendorPanel(){
 function resetAll(){
   if(!confirm('Clear all on-hand counts and start over?')) return;
   state={};
+  hasUnsavedChanges=true;
   saveState();
+  setSaveStatus('Unsaved changes');
   for(const cat of CATEGORIES){
     for(const item of cat.items){
       const inp=document.getElementById(`inp-${item.id}`);
@@ -886,8 +915,70 @@ function showToast(msg, isError=false, duration=5000){
   setTimeout(()=>t.classList.remove('show'), duration);
 }
 
+async function verifyLatestSharedInventory(){
+  setSaveStatus('Checking latest…');
+  try{
+    const data=await fetchSharedSnapshot();
+    if(!data.snapshot) throw new Error('No shared inventory count is available.');
+
+    const latestId=String(data.snapshot.id);
+    if(sharedSnapshotId===null || latestId!==sharedSnapshotId){
+      applySharedSnapshot(data);
+      setSaveStatus(`Synced ${snapshotTimeLabel(data.snapshot)}`);
+      showToast(
+        'A newer inventory was saved on another device. It has been loaded automatically — review it, then press Generate Order again.',
+        true,
+        10000
+      );
+      return false;
+    }
+
+    sharedSyncReady=true;
+    updateStats();
+    setSaveStatus(
+      hasUnsavedChanges
+        ? 'Unsaved changes'
+        : `Synced ${snapshotTimeLabel(data.snapshot)}`
+    );
+    return true;
+  }catch(e){
+    sharedSyncReady=false;
+    updateStats();
+    setSaveStatus('Cannot verify inventory', true);
+    showToast(
+      'Order blocked: the latest shared inventory could not be verified. '+e.message,
+      true,
+      10000
+    );
+    return false;
+  }
+}
+
+async function syncAfterGeneratedOrder(){
+  try{
+    const data=await fetchSharedSnapshot();
+    if(!data.snapshot) throw new Error('No saved snapshot was returned.');
+    applySharedSnapshot(data);
+    setSaveStatus(`Synced ${snapshotTimeLabel(data.snapshot)}`);
+  }catch(e){
+    sharedSnapshotId=null;
+    sharedSyncReady=false;
+    updateStats();
+    setSaveStatus('Recheck required', true);
+  }
+}
+
 async function generateOrder(){
   const btn = document.getElementById('generateBtn');
+
+  btn.innerHTML = '<span class="spin"></span> Checking inventory…';
+  btn.setAttribute('disabled','');
+  const inventoryIsCurrent=await verifyLatestSharedInventory();
+  if(!inventoryIsCurrent){
+    btn.innerHTML = '🚀 Generate Order';
+    updateStats();
+    return;
+  }
 
   // Collect on-hand counts: {itemName: onHandValue}
   const counts = {};
@@ -929,6 +1020,7 @@ async function generateOrder(){
       const url  = URL.createObjectURL(blob);
       window.open(url, '_blank');
       showToast('✅ Weekly order generated!');
+      await syncAfterGeneratedOrder();
     }
   } catch(e) {
     showToast('❌ Request failed: ' + e.message, true, 8000);
@@ -936,7 +1028,7 @@ async function generateOrder(){
 
   // Restore button
   btn.innerHTML = '🚀 Generate Order';
-  btn.removeAttribute('disabled');
+  updateStats();
 }
 
 // ── Init ────────────────────────────────────────────────
