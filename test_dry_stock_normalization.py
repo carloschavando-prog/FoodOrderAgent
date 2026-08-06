@@ -48,6 +48,12 @@ class DryStockNormalizationTests(unittest.TestCase):
         self.assertEqual(pricing["units_per_case"], 4)
         self.assertEqual(cases_required(row, pricing), 2)
 
+    def test_simple_syrup_is_counted_in_gallons(self):
+        row = item("Simple Syrup", 10)
+        row["category_id"] = 6
+
+        self.assertEqual(count_unit_for_item(row), "gallon")
+
     def test_vendor_selection_uses_extended_cost_for_each_pack(self):
         row = item("Garlic Parmesan", 5)
         two_gallon_case = price(30, 256)

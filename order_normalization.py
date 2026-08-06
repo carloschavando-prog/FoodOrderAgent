@@ -14,6 +14,7 @@ ITEM_COUNT_UNITS = {
     "pecorino romano blend": "5-pound bag",
     "pizza cheese": "5-pound bag",
     "ranch dressing": "gallon",
+    "simple syrup": "gallon",
     'tortilla, flour 12"': "12-count pack",
 }
 

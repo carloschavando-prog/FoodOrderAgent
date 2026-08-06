@@ -55,7 +55,7 @@ ITEMS = [
   ('Tortilla, Flour 6"',         3, "12/24",   None,  1),
   # Dry Stock (cat 4)
   ("Garlic Parmesan",            4, "2/1 GAL",    9,  2),
-  ("Yellow Mustard",             4, "4/1 GAL",    4,  2),
+  ("Yellow Mustard",             4, "4/1 GAL",    3,  2),
   ("Ketchup Packets",            4, "1000/9G",    3,  2),
   ("Mustard Packets",            4, "500/7G",     3,  2),
   ("Mayo Packets",               4, "500/9G",     3,  2),
@@ -114,6 +114,7 @@ ITEMS = [
   ("Pizza Cheese",               6, "6/5 LB",    10,  2),
   ("Caesar Dressing",            6, "4/1 GAL",    3,  1),
   ("Ranch Dressing",             6, "4/1 GAL",    8,  1),
+  ("Simple Syrup",               6, "HOUSE MADE", 10, None),
   ("Sour Cream",                 6, "4/5 LB",  None,  1),
   ("Pickles",                    6, "5 GAL",      1,  2),
   ("Bacon Toppings",             6, "2/5 LB",     2,  1),

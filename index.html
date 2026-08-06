@@ -360,7 +360,7 @@ const CATEGORIES = [
     id:"drystock", name:"Dry Stock", icon:"🏪",
     items:[
       {id:19, name:"Garlic Parmesan",            buildTo:9,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL",    countUnit:"gallon"},
-      {id:20, name:"Yellow Mustard",             buildTo:4,  vendor:"PFG",        price:18.20,  unit:"4/1 GAL",    countUnit:"gallon"},
+      {id:20, name:"Yellow Mustard",             buildTo:3,  tuesdayBuildTo:2, fridayBuildTo:3, vendor:"PFG", price:18.20, unit:"4/1 GAL", countUnit:"gallon"},
       {id:24, name:"Ketchup Packets",            buildTo:3,  vendor:"PFG",        price:23.25,  unit:"1000/9G",    countUnit:"case"},
       {id:25, name:"Mustard Packets",            buildTo:3,  vendor:"PFG",        price:15.00,  unit:"500/7G",     countUnit:"case"},
       {id:27, name:"Mayo Packets",               buildTo:3,  vendor:"PFG",        price:46.72,  unit:"500/9G",     countUnit:"case"},
@@ -427,6 +427,7 @@ const CATEGORIES = [
       {id:104,name:"Pizza Cheese",               buildTo:10, tuesdayBuildTo:5, fridayBuildTo:10, vendor:"PFG", price:95.69, unit:"6/5 LB", countUnit:"5-pound bag"},
       {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
       {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL", countUnit:"gallon"},
+      {id:237,name:"Simple Syrup",               buildTo:10, vendor:"HOUSE BUILD", price:null,   unit:"HOUSE MADE", countUnit:"gallon", houseBuild:true},
       {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
       {id:111,name:"Pickles",                    buildTo:1,  vendor:"PFG",        price:35.68,  unit:"5 GAL"},
       {id:112,name:"Bacon Toppings",             buildTo:2,  vendor:"US FOODS",   price:82.59,  unit:"2/5 LB"},

@@ -81,6 +81,8 @@ REQUIRED_VENDOR_BY_ITEM = {
     "heavy duty rinse additive": 1,
 }
 
+HOUSE_BUILT_ITEM_NAMES = {"simple syrup"}
+
 INVENTORY_NAME_ALIASES = {
     "napkins c fold": "napkins xpressnap",
 }
@@ -295,6 +297,8 @@ def assign_cheapest(canonical_items, best_prices, active):
     assignment = {}
     for ci in canonical_items:
         if ci["order_qty"] <= 0:
+            continue
+        if ci["name"].lower().strip() in HOUSE_BUILT_ITEM_NAMES:
             continue
         required_vid = required_vendor(ci)
         if required_vid is not None:
@@ -927,14 +931,22 @@ def build_html(assignment, dropped, unassigned, notes,
                 cat_name = dict(CAT_ORDER).get(ci["category_id"], "")
                 h.append(f'<tr class="cat-header"><td colspan="5">{cat_name}</td></tr>')
             pref_vid  = ci["preferred_vid"]
-            pref_name = VENDOR_NAMES.get(pref_vid) or other_vendors.get(pref_vid, f"Vendor {pref_vid}")
+            is_house_build = ci["name"].lower().strip() in HOUSE_BUILT_ITEM_NAMES
+            pref_name = (
+                "House Build"
+                if is_house_build
+                else VENDOR_NAMES.get(pref_vid)
+                or other_vendors.get(pref_vid, f"Vendor {pref_vid}")
+            )
             needed = (
                 f'{fmt_qty(ci["order_qty"])} '
                 f'{fmt_count_unit(ci.get("count_unit", "case"), ci["order_qty"])}'
                 if ci["order_qty"] > 0 else "?"
             )
             reason = (
-                "No compatible normalized case pack"
+                "Build to PAR; not a vendor purchase"
+                if is_house_build
+                else "No compatible normalized case pack"
                 if ci.get("count_unit") != "case"
                 else "No broadliner price on file"
             )

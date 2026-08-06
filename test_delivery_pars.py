@@ -15,7 +15,7 @@ class DeliveryParConfigurationTests(unittest.TestCase):
         self.assertEqual(set(DELIVERY_PARS), {"tuesday", "friday"})
         self.assertEqual(set(DELIVERY_PARS["tuesday"]), expected_names)
         self.assertEqual(set(DELIVERY_PARS["friday"]), expected_names)
-        self.assertEqual(len(expected_names), 99)
+        self.assertEqual(len(expected_names), 100)
 
     def test_event_items_are_not_given_standing_pars(self):
         for cycle_pars in DELIVERY_PARS.values():
@@ -33,6 +33,7 @@ class DeliveryParConfigurationTests(unittest.TestCase):
             "potato hamburger bun": (2, 6),
             "tenders": (6, 10),
             'tortilla, flour 12"': (5, 7),
+            "yellow mustard": (2, 3),
         }
 
         actual = {
@@ -44,6 +45,10 @@ class DeliveryParConfigurationTests(unittest.TestCase):
             if DELIVERY_PARS["tuesday"][name] != DELIVERY_PARS["friday"][name]
         }
         self.assertEqual(actual, expected)
+
+    def test_simple_syrup_is_a_fixed_ten_gallon_build_to(self):
+        self.assertEqual(par_for_delivery("simple syrup", "tuesday"), 10)
+        self.assertEqual(par_for_delivery("simple syrup", "friday"), 10)
 
     def test_unknown_items_are_not_assigned_database_fallback_pars(self):
         self.assertIsNone(par_for_delivery("obsolete database item", "tuesday"))

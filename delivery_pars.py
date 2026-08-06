@@ -38,7 +38,7 @@ BASE_PAR_LEVELS = {
     "kosher salt": 1.0,
     'tortilla, flour 12"': 7.0,
     "garlic parmesan": 9.0,
-    "yellow mustard": 4.0,
+    "yellow mustard": 3.0,
     "ketchup packets": 3.0,
     "mustard packets": 3.0,
     "mayo packets": 3.0,
@@ -87,6 +87,7 @@ BASE_PAR_LEVELS = {
     "pizza cheese": 10.0,
     "caesar dressing": 3.0,
     "ranch dressing": 8.0,
+    "simple syrup": 10.0,
     "pickles": 1.0,
     "bacon toppings": 2.0,
     "sliced bacon": 3.0,
@@ -123,7 +124,9 @@ BASE_PAR_LEVELS = {
 }
 
 # Usage-based values use the peak of six completed service windows from the
-# June 8-July 26, 2026 GoTab exports. Wrap ingredients use 1 tortilla and
+# GoTab exports. Mega Pretzels use 4 ounces of yellow mustard each; the peak
+# windows require 2 gallons for Tuesday delivery and 3 gallons for Friday.
+# Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
 # factor; chicken converts cooked portions to raw purchasing weight at 80%
@@ -139,6 +142,7 @@ TUESDAY_PAR_OVERRIDES = {
     "potato hamburger bun": 2.0,
     "tenders": 6.0,
     'tortilla, flour 12"': 5.0,
+    "yellow mustard": 2.0,
 }
 
 FRIDAY_PAR_OVERRIDES = {

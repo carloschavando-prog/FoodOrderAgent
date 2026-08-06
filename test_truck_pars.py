@@ -95,6 +95,22 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 10,
                 "preferred_vendor_id": 2,
             },
+            {
+                "id": 20,
+                "name": "Yellow Mustard",
+                "category_id": 4,
+                "pack_size": "4/1 GAL",
+                "par_level": 3,
+                "preferred_vendor_id": 2,
+            },
+            {
+                "id": 237,
+                "name": "Simple Syrup",
+                "category_id": 6,
+                "pack_size": "HOUSE MADE",
+                "par_level": 10,
+                "preferred_vendor_id": None,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -160,6 +176,32 @@ class TruckParTests(unittest.TestCase):
 
         self.assertEqual(chicken["par_level"], 3)
         self.assertEqual(chicken["order_qty"], 3)
+
+    def test_mustard_uses_recipe_based_delivery_pars(self):
+        self.assertEqual(self.load_items("tuesday")["yellow mustard"]["par_level"], 2)
+        self.assertEqual(self.load_items("friday")["yellow mustard"]["par_level"], 3)
+
+    def test_simple_syrup_builds_to_ten_gallons_on_both_trucks(self):
+        for cycle in ("tuesday", "friday"):
+            syrup = self.load_items(cycle)["simple syrup"]
+            self.assertEqual(syrup["par_level"], 10)
+            self.assertEqual(syrup["order_qty"], 10)
+            self.assertEqual(syrup["count_unit"], "gallon")
+
+    def test_simple_syrup_is_never_assigned_to_a_broadliner(self):
+        syrup = self.load_items("friday")["simple syrup"]
+        stale_vendor_price = {
+            "price": 1.0,
+            "unit_quantity": 1280,
+            "unit_basis": "oz",
+            "units_per_case": 10,
+        }
+
+        assignment = generate_order.assign_cheapest(
+            [syrup], {syrup["id"]: {1: stale_vendor_price}}, {1}
+        )
+
+        self.assertEqual(assignment, {})
 
 
 if __name__ == "__main__":
