@@ -120,7 +120,7 @@ ITEMS = [
   ("Bacon Toppings",             6, "2/5 LB",     2,  1),
   ("Sliced Bacon",               6, "15 LB",      3,  2),
   # Freezer (cat 7)
-  ("Potato Hamburger Bun",       7, "5/12",       6,  1),
+  ("Potato Hamburger Bun",       7, "5/12",       3,  1),
   ("Fries",                      7, "6/5 LB",    13,  2),
   ("Flatbread Dough",            7, "28/1",       6,  2),
   ("Pepperoni",                  7, "10 LB",      4,  2),

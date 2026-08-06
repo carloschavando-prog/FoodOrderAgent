@@ -69,6 +69,11 @@ class OrderCycleUiTests(unittest.TestCase):
             "tuesdayBuildTo:7, fridayBuildTo:12",
             self.source,
         )
+        self.assertIn(
+            'name:"Potato Hamburger Bun",       buildTo:3,  '
+            "tuesdayBuildTo:2, fridayBuildTo:3",
+            self.source,
+        )
 
 
 if __name__ == "__main__":

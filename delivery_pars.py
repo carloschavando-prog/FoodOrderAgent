@@ -91,7 +91,7 @@ BASE_PAR_LEVELS = {
     "pickles": 1.0,
     "bacon toppings": 2.0,
     "sliced bacon": 3.0,
-    "potato hamburger bun": 6.0,
+    "potato hamburger bun": 3.0,
     "fries": 13.0,
     "flatbread dough": 6.0,
     "pepperoni": 4.0,
@@ -137,6 +137,8 @@ BASE_PAR_LEVELS = {
 # latest peaks round to 7 Tuesday cases and 11 Friday cases, plus 1 buffer case.
 # Milwaukee Pretzels come 8 per case. The latest six-window peaks require 7
 # Tuesday cases and 12 Friday cases.
+# Potato hamburger buns come 60 per case, with 1 bun per Classic Burger. The
+# latest peaks round to 1 Tuesday and 2 Friday cases, plus 1 buffer case.
 # Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
@@ -165,7 +167,7 @@ FRIDAY_PAR_OVERRIDES = {
     "fries": 13.0,
     "milwaukee pretzel": 12.0,
     "pizza cheese": 10.0,
-    "potato hamburger bun": 6.0,
+    "potato hamburger bun": 3.0,
     "tenders": 12.0,
     'tortilla, flour 12"': 7.0,
 }

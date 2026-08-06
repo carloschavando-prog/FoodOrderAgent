@@ -160,7 +160,7 @@ class TruckParTests(unittest.TestCase):
         expected = {
             "burger patties": 5,
             "double lobe chicken breasts": 4,
-            "potato hamburger bun": 6,
+            "potato hamburger bun": 3,
             "fries": 13,
             "flatbread dough": 6,
             "milwaukee pretzel": 12,

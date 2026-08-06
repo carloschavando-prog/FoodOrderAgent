@@ -31,7 +31,7 @@ class DeliveryParConfigurationTests(unittest.TestCase):
             "milwaukee pretzel": (7, 12),
             "ope sauce": (6, 9),
             "pizza cheese": (5, 10),
-            "potato hamburger bun": (2, 6),
+            "potato hamburger bun": (2, 3),
             "tenders": (8, 12),
             'tortilla, flour 12"': (5, 7),
             "yellow mustard": (2, 3),
