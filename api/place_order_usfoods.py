@@ -1,7 +1,7 @@
 """
 POST /api/place_order_usfoods
 ==============================
-Places a US Foods order via the panamax REST API.
+Places a US Foods order via the Panamax REST APIs.
 
 Body JSON:
   {"items": [{"productNumber": 1085770, "qty": 3}, ...]}
@@ -19,14 +19,14 @@ Credentials table (Supabase):
   vendor_auth(vendor_id int PK, credentials jsonb, updated_at timestamptz)
 """
 
-import json, os, uuid, time, urllib.request, urllib.error, datetime
+import json, os, uuid, time, urllib.request, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 SB_URL   = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY   = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
-SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", SB_KEY)   # service role key for vendor_auth
+SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 API_BASE = "https://panamax-api.ama.usfoods.com"
 
@@ -40,6 +40,8 @@ SB_HDRS = {
 
 def _sb_svc_headers():
     """Headers using service role key (for vendor_auth table)."""
+    if not SB_SKEY:
+        raise RuntimeError("SUPABASE_SERVICE_KEY is required for vendor credentials")
     return {
         "apikey":        SB_SKEY,
         "Authorization": f"Bearer {SB_SKEY}",
@@ -51,8 +53,14 @@ def _sb_svc_headers():
 def load_usf_credentials():
     """
     Load USF credentials from Supabase vendor_auth (vendor_id=1).
-    Falls back to USF_REFRESH_TOKEN + USF_CONFIG env vars.
+    Falls back to USF_CONFIG + USF_REFRESH_TOKEN when no Supabase row exists.
+
+    The environment refresh token is intentionally not allowed to override a
+    Supabase token here. US Foods rotates refresh tokens, so an env token is a
+    one-time bootstrap credential rather than a durable source of truth.
     """
+    env_refresh_token = os.getenv("USF_REFRESH_TOKEN", "").strip()
+
     # 1. Try Supabase vendor_auth table
     try:
         req = urllib.request.Request(
@@ -62,14 +70,14 @@ def load_usf_credentials():
         with urllib.request.urlopen(req, timeout=10) as r:
             rows = json.loads(r.read())
         if rows:
-            return rows[0]["credentials"]
+            return dict(rows[0]["credentials"])
     except Exception:
         pass
 
     # 2. Fall back to env vars (CI pattern)
     if os.getenv("USF_CONFIG"):
         creds = json.loads(os.environ["USF_CONFIG"])
-        creds["refresh_token"] = os.environ.get("USF_REFRESH_TOKEN", "")
+        creds["refresh_token"] = env_refresh_token
         return creds
 
     raise RuntimeError(
@@ -95,7 +103,36 @@ def save_usf_refresh_token(new_refresh_token, config):
         print(f"  ⚠️  Could not save USF refresh token: {ex}")
 
 
+def refresh_bearer_with_fallback(config):
+    """Refresh from Supabase, using the env token once if that token expired."""
+    try:
+        return refresh_bearer(config), config
+    except RuntimeError as ex:
+        env_refresh_token = os.getenv("USF_REFRESH_TOKEN", "").strip()
+        stored_refresh_token = str(config.get("refresh_token", "")).strip()
+        if (
+            "invalid refresh token" not in str(ex).lower()
+            or not env_refresh_token
+            or env_refresh_token == stored_refresh_token
+        ):
+            raise
+
+        fallback_config = dict(config)
+        fallback_config["refresh_token"] = env_refresh_token
+        return refresh_bearer(fallback_config), fallback_config
+
+
 # ── Token refresh ─────────────────────────────────────────────────────────────
+
+def _http_error_message(stage, error):
+    """Return an actionable vendor error without exposing auth headers."""
+    try:
+        body = error.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+    detail = body[:800] if body else (error.reason or "request rejected")
+    return f"US Foods {stage} failed (HTTP {error.code}): {detail}"
+
 
 def refresh_bearer(config):
     """Exchange refresh token for new Bearer + refresh token. Updates config."""
@@ -119,20 +156,27 @@ def refresh_bearer(config):
         f"{API_BASE}/auth-api/v1/oauth/token",
         data=json.dumps(payload).encode(), headers=hdrs, method="POST"
     )
-    with urllib.request.urlopen(req, timeout=20) as r:
-        resp = json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            resp = json.loads(r.read())
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(_http_error_message("authentication", ex)) from ex
 
-    bearer = f"{resp['tokenType']} {resp['accessToken']}"
-    save_usf_refresh_token(resp["refreshToken"], config)
+    access_token = resp.get("accessToken")
+    if not access_token:
+        raise RuntimeError("US Foods authentication returned no access token")
+    bearer = f"{resp.get('tokenType', 'Bearer')} {access_token}"
+    if resp.get("refreshToken"):
+        save_usf_refresh_token(resp["refreshToken"], config)
     return bearer
 
 
 # ── USF API helper ────────────────────────────────────────────────────────────
 
-def usf_call(method, path, bearer, payload=None, params=None):
+def usf_call(method, path, bearer, payload=None, params=None, stage="API request"):
     url = f"{API_BASE}/{path}"
     if params:
-        url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        url += "?" + urllib.parse.urlencode(params)
     hdrs = {
         "Accept":          "application/json, text/plain, */*",
         "Authorization":   bearer,
@@ -143,30 +187,44 @@ def usf_call(method, path, bearer, payload=None, params=None):
         "Origin":          "https://order.usfoods.com",
         "usflang":         "en",
     }
-    data = json.dumps(payload).encode() if payload else None
+    data = json.dumps(payload).encode() if payload is not None else None
     req  = urllib.request.Request(url, data=data, headers=hdrs, method=method)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            raw = r.read()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as ex:
+        raise RuntimeError(_http_error_message(stage, ex)) from ex
 
 
 # ── Order placement ───────────────────────────────────────────────────────────
 
 def get_delivery_date(bearer):
     """Return next available delivery date as ISO string (YYYY-MM-DDT00:00:00.000Z)."""
-    try:
-        resp = usf_call("GET", "order-request-reply-domain-api/v1/nextDeliveryDate", bearer)
-        return resp.get("deliveryDate", "")
-    except Exception:
-        # Fallback: next Thursday (USF typically delivers Thu/Fri)
-        today = datetime.date.today()
-        days_ahead = (3 - today.weekday()) % 7 or 7   # next Thursday
-        d = today + datetime.timedelta(days=days_ahead)
-        return f"{d.isoformat()}T00:00:00.000Z"
+    resp = usf_call(
+        "GET",
+        "order-request-reply-domain-api/v1/nextDeliveryDate",
+        bearer,
+        stage="delivery-date lookup",
+    )
+    delivery_date = resp.get("deliveryDate", "") if isinstance(resp, dict) else ""
+    if not delivery_date:
+        raise RuntimeError("US Foods returned no available delivery date")
+    return delivery_date
+
+
+def _first_order(response, stage):
+    """Panamax order endpoints return a one-element list in the current API."""
+    if isinstance(response, list):
+        response = response[0] if response else {}
+    if not isinstance(response, dict) or not response:
+        raise RuntimeError(f"US Foods {stage} returned no order")
+    return response
 
 
 def place_order(bearer, config, items):
     """
-    Create and submit a US Foods order in a single POST.
+    Create, update, and submit a US Foods in-progress order.
     items: [{"productNumber": 1085770, "qty": 3}, ...]
     Returns: {"orderId": str, "tandemOrderNumber": int, "deliveryDate": str}
     """
@@ -177,31 +235,77 @@ def place_order(bearer, config, items):
         {
             "productNumber": item["productNumber"],
             "unitsOrdered":  item["qty"],
+            "eachesOrdered": 0,
             "sequence":      (i + 1) * 10,
         }
         for i, item in enumerate(items)
     ]
 
-    body = {
+    context = {
         "divisionNumber":        auth_ctx.get("divisionNumber", 1103),
         "customerNumber":        auth_ctx.get("customerNumber", 31586241),
         "departmentNumber":      auth_ctx.get("departmentNumber", 0),
         "orderType":             "RT",
         "requestedDeliveryDate": delivery_date,
+        "confirmedDeliveryDate": delivery_date,
         "addOrderSource":        "MO",
-        "orderItems":            order_items,
+        "orderItems":            [],
+        "decomposeFlag":         True,
     }
 
-    resp = usf_call("POST", "order-domain-api/v1/orders", bearer, body)
+    # The current web client first obtains the server-side in-progress order
+    # context, then updates it with items, and finally submits that full order.
+    order = _first_order(
+        usf_call(
+            "PUT",
+            "order-domain-api/v1/orders",
+            bearer,
+            context,
+            stage="order creation",
+        ),
+        "order creation",
+    )
 
-    # Response may be the order object or wrapped in a list
-    if isinstance(resp, list):
-        resp = resp[0] if resp else {}
+    order.update({
+        "requestedDeliveryDate": delivery_date,
+        "confirmedDeliveryDate": delivery_date,
+        "orderItems": order_items,
+        "totalUnits": sum(int(item["qty"]) for item in items),
+        "totalEaches": 0,
+        "decomposeFlag": True,
+    })
+
+    order = _first_order(
+        usf_call(
+            "PUT",
+            "order-domain-api/v1/orders",
+            bearer,
+            order,
+            stage="order update",
+        ),
+        "order update",
+    )
+
+    submitted = _first_order(
+        usf_call(
+            "POST",
+            "order-submission-domain-api/v1/submitIpOrder",
+            bearer,
+            order,
+            stage="order submission",
+        ),
+        "order submission",
+    )
+
+    order_id = submitted.get("orderId") or order.get("orderId") or ""
+    tandem_number = (submitted.get("tandemOrderNumber")
+                     or order.get("tandemOrderNumber"))
 
     return {
-        "orderId":           resp.get("orderId", ""),
-        "tandemOrderNumber": resp.get("tandemOrderNumber"),
-        "deliveryDate":      delivery_date[:10],
+        "orderId":           order_id,
+        "tandemOrderNumber": tandem_number,
+        "deliveryDate":      (submitted.get("requestedDeliveryDate")
+                              or delivery_date)[:10],
     }
 
 
@@ -224,7 +328,7 @@ class handler(BaseHTTPRequestHandler):
                 raise ValueError("No items in request body")
 
             config = load_usf_credentials()
-            bearer = refresh_bearer(config)
+            bearer, config = refresh_bearer_with_fallback(config)
             result = place_order(bearer, config, items)
 
             payload = json.dumps({

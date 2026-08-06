@@ -6,9 +6,9 @@ maintained by a server-side session cookie (__Secure-GORDONORDERING2).
 
 Flow:
   1. Load session cookies from GFS_COOKIES (CI) or ~/.FoodOrderAgent/gfs_session.json (local)
-  2. GET /us-central1/api/v6/lists/order-guide    → all material numbers (144 items)
-  3. POST /us-central1/api/v1/materials/info       → product names/brands (batches of 50)
-  4. POST /us-central1/api/v5/prices               → case prices (batches of 50)
+  2. GET /{GOR}/api/v6/lists/order-guide          → all material numbers (144 items)
+  3. POST /{GOR}/api/v1/materials/info             → product names/brands (batches of 50)
+  4. POST /{GOR}/api/v5/prices                     → case prices (batches of 50)
   5. Create price_list entry, match to item master, upsert to Supabase
 
 Session refresh (when cookies expire):
@@ -34,7 +34,7 @@ import json, os, re, sys, urllib.request, urllib.error, urllib.parse
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-API_BASE   = "https://order.gfs.com/us-central1/api"
+API_ORIGIN = "https://order.gfs.com"
 SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY     = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
 SEASON     = os.getenv("PRICE_SEASON", "Spring 2026")
@@ -115,7 +115,8 @@ def _gfs_headers(cookies, extra=None):
 
 
 def gfs_get(path, cookies):
-    url = f"{API_BASE}/{path}"
+    region = cookies.get("GOR") or "us-central1"
+    url = f"{API_ORIGIN}/{region}/api/{path}"
     req = urllib.request.Request(url, headers=_gfs_headers(cookies))
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -130,7 +131,8 @@ def gfs_get(path, cookies):
 
 
 def gfs_post(path, body, cookies):
-    url = f"{API_BASE}/{path}"
+    region = cookies.get("GOR") or "us-central1"
+    url = f"{API_ORIGIN}/{region}/api/{path}"
     data = json.dumps(body).encode()
     req = urllib.request.Request(
         url, data=data,

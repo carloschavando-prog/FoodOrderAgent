@@ -166,10 +166,13 @@ def get_bearer_token(email, password):
             else:
                 cookie_str = sysco_cookies_raw
             return _validate_with_cookies(cookie_str)
-        except RuntimeError:
-            raise
         except Exception as ex:
-            print(f"  ⚠️  Cookie fast path failed ({ex}) — falling back to Okta flow ...")
+            if not password:
+                raise
+            print(
+                f"  ⚠️  Cookie fast path failed ({ex}) — "
+                "falling back to password authentication ..."
+            )
 
     jar    = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
@@ -218,162 +221,57 @@ def get_bearer_token(email, password):
         )
     print(f"  [2] stateToken: {state_token[:30]}...")
 
-    # ── Step 3: Authenticate — IDX API (new) or Classic API (old) ───────────────
-    # Okta Identity Engine tokens start with "02.id." and require the IDX API.
-    # Classic tokens use /api/v1/authn; IDX tokens use /idp/idx/identify.
-    if state_token.startswith("02."):
-        print("  [3] Okta IDX flow detected (interactionHandle starts with 02.) ...")
-        _idx_headers = {
-            "Content-Type": "application/ion+json; okta-version=1.0.0",
-            "Accept":       "application/ion+json; okta-version=1.0.0",
+    # ── Step 3: Authenticate the custom-page stateToken ──────────────────────
+    # Sysco's page currently returns stateToken values beginning with "02.id.".
+    # The field name and page contract still use Okta's Authentication API;
+    # treating the value as an IDX interactionHandle makes /introspect reject it.
+    print("  [3] Okta stateToken authentication ...")
+    authn_req = urllib.request.Request(
+        f"{OKTA_BASE}/api/v1/authn",
+        data=json.dumps({
+            "password":   password,
+            "username":   email,
+            "options":    {"warnBeforePasswordExpired": True,
+                           "multiOptionalFactorEnroll": False},
+            "stateToken": state_token,
+        }).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Accept":       "application/json",
             "User-Agent":   _UA,
             "Origin":       OKTA_BASE,
             "Referer":      f"{OKTA_BASE}/",
-        }
+        },
+    )
+    try:
+        with opener.open(authn_req, timeout=20) as r:
+            authn_resp = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:400]
+        raise RuntimeError(f"Okta /api/v1/authn → {e.code}: {body}")
 
-        # 3a. Introspect — exchange interactionHandle for an IDX state
-        introspect_req = urllib.request.Request(
-            f"{OKTA_BASE}/idp/idx/introspect",
-            data=json.dumps({"interactionHandle": state_token}).encode(),
-            headers=_idx_headers,
+    status = authn_resp.get("status", "")
+    if status != "SUCCESS":
+        raise RuntimeError(
+            f"Okta authn failed: status={status}. "
+            f"Response: {json.dumps(authn_resp)[:300]}"
         )
-        try:
-            with opener.open(introspect_req, timeout=20) as r:
-                introspect_resp = json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()[:400]
-            raise RuntimeError(f"Okta IDX /introspect → {e.code}: {body}")
+    print(f"  [3] authn status: {status}")
 
-        state_handle = introspect_resp.get("stateHandle", "")
-        print(f"  [3a] stateHandle: {state_handle[:30]}...")
-
-        # 3b. Identify — submit username
-        identify_req = urllib.request.Request(
-            f"{OKTA_BASE}/idp/idx/identify",
-            data=json.dumps({
-                "identifier":   email,
-                "rememberMe":   False,
-                "stateHandle":  state_handle,
-            }).encode(),
-            headers=_idx_headers,
-        )
-        try:
-            with opener.open(identify_req, timeout=20) as r:
-                identify_resp = json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()[:400]
-            raise RuntimeError(f"Okta IDX /identify → {e.code}: {body}")
-
-        # Grab updated stateHandle for the challenge step
-        state_handle = identify_resp.get("stateHandle", state_handle)
-
-        # 3c. Challenge/answer — submit password
-        answer_req = urllib.request.Request(
-            f"{OKTA_BASE}/idp/idx/challenge/answer",
-            data=json.dumps({
-                "credentials": {"passcode": password},
-                "stateHandle": state_handle,
-            }).encode(),
-            headers=_idx_headers,
-        )
-        try:
-            with opener.open(answer_req, timeout=20) as r:
-                answer_resp = json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()[:400]
-            raise RuntimeError(f"Okta IDX /challenge/answer → {e.code}: {body}")
-
-        print(f"  [3c] IDX answer keys: {list(answer_resp.keys())}")
-
-        # IDX success — the redirect URL with SAMLResponse is in successWithInteractionCode
-        # or in a redirect value; follow the success redirect to get the SAML form
-        success_url = None
-        if "successWithInteractionCode" in answer_resp:
-            href = (answer_resp["successWithInteractionCode"]
-                    .get("href") or answer_resp["successWithInteractionCode"]
-                    .get("value", [{}])[0].get("href", ""))
-            success_url = href
-        elif "success" in answer_resp:
-            success_url = answer_resp["success"].get("href", "")
-
-        if not success_url:
-            # Try to find any redirect in the response
-            for key in ("redirect", "location"):
-                if key in answer_resp:
-                    success_url = answer_resp[key].get("href", "")
-                    break
-
-        print(f"  [3c] success_url: {(success_url or 'NOT FOUND')[:80]}")
-        if not success_url:
-            with open("/tmp/sysco_idx_answer_debug.json", "w") as f:
-                json.dump(answer_resp, f, indent=2)
-            raise RuntimeError(
-                f"IDX answer did not return a success URL. "
-                f"Keys: {list(answer_resp.keys())}. "
-                f"Debug saved to /tmp/sysco_idx_answer_debug.json"
-            )
-
-        # Follow the success redirect → lands on the SAML assertion POST page
-        step_req = urllib.request.Request(
-            success_url,
-            headers={
-                "User-Agent": _UA,
-                "Accept":     "text/html,application/xhtml+xml,*/*",
-                "Referer":    f"{OKTA_BASE}/",
-            },
-        )
-        with opener.open(step_req, timeout=20) as r:
-            step_html = r.read().decode("utf-8", errors="replace")
-
-    else:
-        # ── Classic Okta API (stateToken does NOT start with "02.") ──────────
-        print("  [3] Classic Okta authn flow ...")
-        authn_req = urllib.request.Request(
-            f"{OKTA_BASE}/api/v1/authn",
-            data=json.dumps({
-                "password":   password,
-                "username":   email,
-                "options":    {"warnBeforePasswordExpired": True,
-                               "multiOptionalFactorEnroll": False},
-                "stateToken": state_token,
-            }).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Accept":       "application/json",
-                "User-Agent":   _UA,
-                "Origin":       OKTA_BASE,
-                "Referer":      f"{OKTA_BASE}/",
-            },
-        )
-        try:
-            with opener.open(authn_req, timeout=20) as r:
-                authn_resp = json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()[:400]
-            raise RuntimeError(f"Okta /api/v1/authn → {e.code}: {body}")
-
-        status = authn_resp.get("status", "")
-        if status != "SUCCESS":
-            raise RuntimeError(
-                f"Okta authn failed: status={status}. "
-                f"Response: {json.dumps(authn_resp)[:300]}"
-            )
-        print(f"  [3] authn status: {status}")
-
-        # ── Step 4: GET step-up redirect → HTML form with SAMLResponse ────────
-        print("  [4] GET step-up/redirect ...")
-        step_url = (f"{OKTA_BASE}/login/step-up/redirect"
-                    f"?stateToken={urllib.parse.quote(state_token)}")
-        step_req = urllib.request.Request(
-            step_url,
-            headers={
-                "User-Agent": _UA,
-                "Accept":     "text/html,application/xhtml+xml,*/*",
-                "Referer":    f"{OKTA_BASE}/",
-            },
-        )
-        with opener.open(step_req, timeout=20) as r:
-            step_html = r.read().decode("utf-8", errors="replace")
+    # ── Step 4: GET step-up redirect → HTML form with SAMLResponse ────────────
+    print("  [4] GET step-up/redirect ...")
+    step_url = (f"{OKTA_BASE}/login/step-up/redirect"
+                f"?stateToken={urllib.parse.quote(state_token)}")
+    step_req = urllib.request.Request(
+        step_url,
+        headers={
+            "User-Agent": _UA,
+            "Accept":     "text/html,application/xhtml+xml,*/*",
+            "Referer":    f"{OKTA_BASE}/",
+        },
+    )
+    with opener.open(step_req, timeout=20) as r:
+        step_html = r.read().decode("utf-8", errors="replace")
 
     parser = _FormParser()
     parser.feed(step_html)

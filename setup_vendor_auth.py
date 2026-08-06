@@ -30,12 +30,14 @@ CREATE TABLE IF NOT EXISTS vendor_auth (
     credentials JSONB   NOT NULL DEFAULT '{}',
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE vendor_auth ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE vendor_auth FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vendor_auth TO service_role;
 """
 
 def ensure_table():
     if not SB_SKEY:
-        print("⚠️  SUPABASE_SERVICE_KEY not set — using publishable key (may fail on vendor_auth)")
-        return
+        raise RuntimeError("SUPABASE_SERVICE_KEY is required for vendor credentials")
     req = urllib.request.Request(
         f"{SB_URL}/rest/v1/rpc/exec_sql",
         data=json.dumps({"query": CREATE_TABLE_SQL}).encode(),
@@ -57,7 +59,9 @@ def ensure_table():
 # ── Supabase upsert ───────────────────────────────────────────────────────────
 
 def upsert(vendor_id, credentials):
-    key = SB_SKEY or os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
+    if not SB_SKEY:
+        raise RuntimeError("SUPABASE_SERVICE_KEY is required for vendor credentials")
+    key = SB_SKEY
     hdrs = {
         "apikey":        key,
         "Authorization": f"Bearer {key}",
@@ -94,7 +98,7 @@ def setup_usf():
         return False
     ok = upsert(1, config)
     if ok:
-        print(f"  ✅ USF credentials saved (refresh_token: {config['refresh_token'][:20]}...)")
+        print("  ✅ USF credentials saved")
     return ok
 
 
@@ -112,7 +116,7 @@ def setup_pfg():
         return False
     ok = upsert(2, config)
     if ok:
-        print(f"  ✅ PFG credentials saved (refresh_token: {config['refresh_token'][:20]}...)")
+        print("  ✅ PFG credentials saved")
     return ok
 
 
@@ -154,7 +158,7 @@ def setup_gfs():
         return False
     ok = upsert(4, creds)
     if ok:
-        print(f"  ✅ GFS cookies saved (session: {creds['session'][:20]}...)")
+        print("  ✅ GFS cookies saved")
     return ok
 
 
@@ -169,10 +173,10 @@ def main():
     args = [a.lower() for a in sys.argv[1:]]
 
     if not SB_SKEY:
-        print("⚠️  SUPABASE_SERVICE_KEY not set.")
-        print("   Get it from: Supabase Dashboard → Settings → API → service_role key")
-        print("   Then: export SUPABASE_SERVICE_KEY='eyJ...'")
-        print("   Continuing with publishable key (may have permission errors on vendor_auth)\n")
+        raise SystemExit(
+            "SUPABASE_SERVICE_KEY is required. Set the Supabase service-role key "
+            "before updating vendor credentials."
+        )
 
     ensure_table()
 

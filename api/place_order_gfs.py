@@ -39,9 +39,9 @@ from http.server import BaseHTTPRequestHandler
 
 SB_URL   = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY   = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
-SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", SB_KEY)
+SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
 
-API_BASE = "https://order.gfs.com/us-central1/api"
+API_ORIGIN = "https://order.gfs.com"
 _UA      = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -52,6 +52,8 @@ MIN_HOURS_BEFORE_CUTOFF = 2
 # ── Credential loading ────────────────────────────────────────────────────────
 
 def _sb_svc_headers():
+    if not SB_SKEY:
+        raise RuntimeError("SUPABASE_SERVICE_KEY is required for vendor credentials")
     return {
         "apikey":        SB_SKEY,
         "Authorization": f"Bearer {SB_SKEY}",
@@ -124,7 +126,8 @@ def _gfs_headers(cookies, extra=None):
 
 def _gfs_request(method, path, body, cookies):
     """Execute a GFS API request, return parsed JSON."""
-    url  = f"{API_BASE}/{path}"
+    region = cookies.get("GOR") or "us-central1"
+    url = f"{API_ORIGIN}/{region}/api/{path}"
     data = json.dumps(body).encode() if body is not None else None
     req  = urllib.request.Request(
         url, data=data,
@@ -166,28 +169,24 @@ def gfs_put(path, body, cookies):
 # ── Order placement helpers ───────────────────────────────────────────────────
 
 def validate_session(cookies):
-    """Validate GFS session is still active. Returns True or raises."""
-    url = f"{API_BASE}/v4/session"
-    req = urllib.request.Request(url, headers=_gfs_headers(cookies), method="HEAD")
-    try:
-        with urllib.request.urlopen(req, timeout=10):
-            return True
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            raise RuntimeError("GFS session expired — re-run intercept_gfs2.py")
-        return True
-    except Exception:
-        return True
+    """Validate GFS session with a read-only endpoint and return its schedules."""
+    schedules = gfs_get("v3/delivery-schedules", cookies)
+    if not isinstance(schedules, dict) or not schedules.get("deliverySchedules"):
+        raise RuntimeError(
+            "GFS session expired or invalid: delivery schedules were unavailable. "
+            "Refresh the GFS browser session before placing the order."
+        )
+    return schedules
 
 
-def get_next_route_date(cookies):
+def get_next_route_date(cookies, schedules=None):
     """
     Fetch delivery schedules and return the soonest route date whose cutoff
     hasn't passed (with MIN_HOURS_BEFORE_CUTOFF buffer).
 
     Returns ISO date string: "2026-05-29"
     """
-    schedules = gfs_get("v3/delivery-schedules", cookies)
+    schedules = schedules or gfs_get("v3/delivery-schedules", cookies)
     entries   = schedules.get("deliverySchedules", [])
     if not entries:
         raise RuntimeError("GFS delivery-schedules returned empty list")
@@ -225,7 +224,7 @@ def place_gfs_order(cookies, items):
     Returns: {"orderId": "...", "deliveryDate": "2026-05-29",
               "cartOrderIds": [...], "cartId": "..."}
     """
-    validate_session(cookies)
+    schedules = validate_session(cookies)
 
     # ── Step 1: Get current active cart ──────────────────────────────────────
     cart    = gfs_post("v8/cart", {}, cookies)
@@ -234,7 +233,7 @@ def place_gfs_order(cookies, items):
         raise RuntimeError(f"Could not retrieve GFS cart ID. Response: {cart}")
 
     # ── Step 2: Get next available delivery date ──────────────────────────────
-    route_date = get_next_route_date(cookies)
+    route_date = get_next_route_date(cookies, schedules=schedules)
 
     # ── Step 3: PUT v7/cart/{id} — add items + set delivery method/date ───────
     ts = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.") + "000Z"
