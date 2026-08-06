@@ -122,7 +122,7 @@ ITEMS = [
   # Freezer (cat 7)
   ("Potato Hamburger Bun",       7, "5/12",       6,  1),
   ("Fries",                      7, "6/5 LB",    13,  2),
-  ("Flatbread Dough",            7, "28/1",      10,  2),
+  ("Flatbread Dough",            7, "28/1",       6,  2),
   ("Pepperoni",                  7, "10 LB",      4,  2),
   ("Fajita Chicken",             7, "2/5 LB",  None,  2),
   ("Beer Cheese Dip",            7, "4/5 LB",    12,  1),

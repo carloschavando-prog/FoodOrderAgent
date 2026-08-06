@@ -26,7 +26,7 @@ class DeliveryParConfigurationTests(unittest.TestCase):
             "burger patties": (3, 5),
             "chicken wings": (3, 7),
             "double lobe chicken breasts": (3, 4),
-            "flatbread dough": (3, 10),
+            "flatbread dough": (5, 6),
             "fries": (10, 13),
             "milwaukee pretzel": (6, 20),
             "ope sauce": (6, 9),

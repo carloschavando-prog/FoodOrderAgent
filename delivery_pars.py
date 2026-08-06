@@ -93,7 +93,7 @@ BASE_PAR_LEVELS = {
     "sliced bacon": 3.0,
     "potato hamburger bun": 6.0,
     "fries": 13.0,
-    "flatbread dough": 10.0,
+    "flatbread dough": 6.0,
     "pepperoni": 4.0,
     "beer cheese dip": 12.0,
     "tenders": 10.0,
@@ -131,6 +131,8 @@ BASE_PAR_LEVELS = {
 # French fries use 1/2 pound with platters, burgers, and wraps, and 1 pound
 # with Loaded Fries and Fry Platters. Peak usage rounds to 7 Tuesday cases and
 # 10 Friday cases; each delivery PAR includes the established 3-case buffer.
+# Flatbread dough comes 28 per case. The latest six-window peaks round to 4
+# Tuesday cases and 5 Friday cases; each delivery PAR includes a 1-case buffer.
 # Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
@@ -140,7 +142,7 @@ TUESDAY_PAR_OVERRIDES = {
     "burger patties": 3.0,
     "chicken wings": 3.0,
     "double lobe chicken breasts": 3.0,
-    "flatbread dough": 3.0,
+    "flatbread dough": 5.0,
     "fries": 10.0,
     "milwaukee pretzel": 6.0,
     "ope sauce": 6.0,
@@ -155,7 +157,7 @@ FRIDAY_PAR_OVERRIDES = {
     "burger patties": 5.0,
     "chicken wings": 7.0,
     "double lobe chicken breasts": 4.0,
-    "flatbread dough": 10.0,
+    "flatbread dough": 6.0,
     "fries": 13.0,
     "milwaukee pretzel": 20.0,
     "pizza cheese": 10.0,
