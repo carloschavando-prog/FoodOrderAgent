@@ -42,7 +42,7 @@ BASE_PAR_LEVELS = {
     "ketchup packets": 3.0,
     "mustard packets": 3.0,
     "mayo packets": 3.0,
-    "ope sauce": 15.0,
+    "ope sauce": 9.0,
     "blended oil": 5.0,
     "olive oil": 1.0,
     "buffalo sauce": 3.0,
@@ -126,6 +126,8 @@ BASE_PAR_LEVELS = {
 # Usage-based values use the peak of six completed service windows from the
 # GoTab exports. Mega Pretzels use 4 ounces of yellow mustard each; the peak
 # windows require 2 gallons for Tuesday delivery and 3 gallons for Friday.
+# OPE Sauce uses 2 ounces with every fry-bearing order except Fry Platters,
+# which use 4 ounces; its peak windows require 6 gallons Tuesday and 9 Friday.
 # Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
@@ -138,6 +140,7 @@ TUESDAY_PAR_OVERRIDES = {
     "flatbread dough": 3.0,
     "fries": 5.0,
     "milwaukee pretzel": 6.0,
+    "ope sauce": 6.0,
     "pizza cheese": 5.0,
     "potato hamburger bun": 2.0,
     "tenders": 6.0,

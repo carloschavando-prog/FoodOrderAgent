@@ -59,7 +59,7 @@ ITEMS = [
   ("Ketchup Packets",            4, "1000/9G",    3,  2),
   ("Mustard Packets",            4, "500/7G",     3,  2),
   ("Mayo Packets",               4, "500/9G",     3,  2),
-  ("OPE Sauce",                  4, "2/1 GAL",   15,  3),
+  ("OPE Sauce",                  4, "2/1 GAL",    9,  3),
   ("Blended Oil",                4, "4/1 GAL",    5,  1),
   ("Olive Oil",                  4, "10 L",       1,  2),
   ("Buffalo Sauce",              4, "4/1 GAL",    3,  2),

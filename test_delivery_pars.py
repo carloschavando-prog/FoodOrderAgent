@@ -29,6 +29,7 @@ class DeliveryParConfigurationTests(unittest.TestCase):
             "flatbread dough": (3, 10),
             "fries": (5, 30),
             "milwaukee pretzel": (6, 20),
+            "ope sauce": (6, 9),
             "pizza cheese": (5, 10),
             "potato hamburger bun": (2, 6),
             "tenders": (6, 10),

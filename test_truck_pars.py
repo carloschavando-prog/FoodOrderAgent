@@ -104,6 +104,14 @@ class TruckParTests(unittest.TestCase):
                 "preferred_vendor_id": 2,
             },
             {
+                "id": 29,
+                "name": "OPE Sauce",
+                "category_id": 4,
+                "pack_size": "2/1 GAL",
+                "par_level": 9,
+                "preferred_vendor_id": 3,
+            },
+            {
                 "id": 237,
                 "name": "Simple Syrup",
                 "category_id": 6,
@@ -180,6 +188,10 @@ class TruckParTests(unittest.TestCase):
     def test_mustard_uses_recipe_based_delivery_pars(self):
         self.assertEqual(self.load_items("tuesday")["yellow mustard"]["par_level"], 2)
         self.assertEqual(self.load_items("friday")["yellow mustard"]["par_level"], 3)
+
+    def test_ope_sauce_uses_recipe_based_delivery_pars(self):
+        self.assertEqual(self.load_items("tuesday")["ope sauce"]["par_level"], 6)
+        self.assertEqual(self.load_items("friday")["ope sauce"]["par_level"], 9)
 
     def test_simple_syrup_builds_to_ten_gallons_on_both_trucks(self):
         for cycle in ("tuesday", "friday"):
