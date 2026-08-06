@@ -149,7 +149,7 @@ class TruckParTests(unittest.TestCase):
             "flatbread dough": 5,
             "milwaukee pretzel": 6,
             "pizza cheese": 5,
-            "tenders": 6,
+            "tenders": 8,
         }
         for name, par in expected.items():
             self.assertEqual(items[name]["par_level"], par)
@@ -165,7 +165,7 @@ class TruckParTests(unittest.TestCase):
             "flatbread dough": 6,
             "milwaukee pretzel": 20,
             "pizza cheese": 10,
-            "tenders": 10,
+            "tenders": 12,
         }
         for name, par in expected.items():
             self.assertEqual(items[name]["par_level"], par)

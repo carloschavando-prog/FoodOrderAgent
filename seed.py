@@ -127,7 +127,7 @@ ITEMS = [
   ("Fajita Chicken",             7, "2/5 LB",  None,  2),
   ("Beer Cheese Dip",            7, "4/5 LB",    12,  1),
   ("JTM Taco Meat",              7, "4/5 LB",  None,  1),
-  ("Tenders",                    7, "2/5 LB",    10,  2),
+  ("Tenders",                    7, "2/5 LB",    12,  2),
   ("Milwaukee Pretzel",          7, "8/24 OZ",   20,  1),
   ("Tater Kegs",                 7, "10 LB",   None,  1),
   ("Variety Dessert Bars",       7, "8/8 CT",  None,  3),

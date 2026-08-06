@@ -96,7 +96,7 @@ BASE_PAR_LEVELS = {
     "flatbread dough": 6.0,
     "pepperoni": 4.0,
     "beer cheese dip": 12.0,
-    "tenders": 10.0,
+    "tenders": 12.0,
     "milwaukee pretzel": 20.0,
     "eco lyzer": 1.0,
     "delimer": 3.0,
@@ -133,6 +133,8 @@ BASE_PAR_LEVELS = {
 # 10 Friday cases; each delivery PAR includes the established 3-case buffer.
 # Flatbread dough comes 28 per case. The latest six-window peaks round to 4
 # Tuesday cases and 5 Friday cases; each delivery PAR includes a 1-case buffer.
+# Chicken Tender Platters use 5 tenders each, with 75 tenders per case. The
+# latest peaks round to 7 Tuesday cases and 11 Friday cases, plus 1 buffer case.
 # Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
@@ -148,7 +150,7 @@ TUESDAY_PAR_OVERRIDES = {
     "ope sauce": 6.0,
     "pizza cheese": 5.0,
     "potato hamburger bun": 2.0,
-    "tenders": 6.0,
+    "tenders": 8.0,
     'tortilla, flour 12"': 5.0,
     "yellow mustard": 2.0,
 }
@@ -162,7 +164,7 @@ FRIDAY_PAR_OVERRIDES = {
     "milwaukee pretzel": 20.0,
     "pizza cheese": 10.0,
     "potato hamburger bun": 6.0,
-    "tenders": 10.0,
+    "tenders": 12.0,
     'tortilla, flour 12"': 7.0,
 }
 

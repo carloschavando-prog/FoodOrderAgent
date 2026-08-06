@@ -45,8 +45,8 @@ class OrderCycleUiTests(unittest.TestCase):
             self.source,
         )
         self.assertIn(
-            'name:"Tenders",                    buildTo:10, '
-            "tuesdayBuildTo:6, fridayBuildTo:10",
+            'name:"Tenders",                    buildTo:12, '
+            "tuesdayBuildTo:8, fridayBuildTo:12",
             self.source,
         )
         self.assertIn(
