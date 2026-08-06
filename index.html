@@ -376,7 +376,7 @@ const CATEGORIES = [
       {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G",     countUnit:"case"},
       {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL",    countUnit:"gallon"},
       {id:47, name:"Fire Roasted Salsa",         buildTo:null,eventDriven:true, vendor:"US FOODS", price:53.28, unit:"4/68 OZ", countUnit:"each"},
-      {id:50, name:"Black Beans",                buildTo:null,eventDriven:true, vendor:"PFG", price:91.25, unit:"24/15.5oz", countUnit:"#10 can"},
+      {id:50, name:"Black Beans",                buildTo:null,eventDriven:true, eventOrderQty:13,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG", price:91.25, unit:"24/15.5oz", countUnit:"#10 can"},
       {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB",      countUnit:"case"},
       {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB",   countUnit:"bag"},
     ]
@@ -441,9 +441,9 @@ const CATEGORIES = [
       {id:115,name:"Fries",                      buildTo:13, tuesdayBuildTo:10, fridayBuildTo:13, vendor:"PFG", price:42.02, unit:"6/5 LB"},
       {id:116,name:"Flatbread Dough",            buildTo:6,  tuesdayBuildTo:5, fridayBuildTo:6,  vendor:"PFG",      price:63.34, unit:"28/1"},
       {id:117,name:"Pepperoni",                  buildTo:4,  vendor:"PFG",        price:59.85,  unit:"10 LB"},
-      {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, vendor:"PFG",      price:63.16, unit:"2/5 LB"},
+      {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG",      price:63.16, unit:"2/5 LB", countUnit:"5-pound bag"},
       {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
-      {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, vendor:"US FOODS", price:74.17, unit:"4/5 LB"},
+      {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:74.17, unit:"4/5 LB", countUnit:"5-pound bag"},
       {id:122,name:"Tenders",                    buildTo:12, tuesdayBuildTo:8, fridayBuildTo:12, vendor:"PFG", price:32.98, unit:"2/5 LB"},
       {id:125,name:"Milwaukee Pretzel",          buildTo:20, tuesdayBuildTo:6, fridayBuildTo:20, vendor:"US FOODS", price:58.25, unit:"8/24 OZ"},
       {id:128,name:"Tater Kegs",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:41.37, unit:"10 LB"},
@@ -541,6 +541,21 @@ function currentTruckCycle(date=new Date()){
   return date.getDay()===4 ? 'friday' : 'tuesday';
 }
 
+function localIsoDate(date=new Date()){
+  const year=date.getFullYear();
+  const month=String(date.getMonth()+1).padStart(2,'0');
+  const day=String(date.getDate()).padStart(2,'0');
+  return `${year}-${month}-${day}`;
+}
+
+function activeEventOrderQty(item, date=new Date()){
+  if(!item.eventDriven) return 0;
+  if(item.eventOrderCycle && item.eventOrderCycle!==currentTruckCycle(date)) return 0;
+  if(item.eventOrderThrough && localIsoDate(date)>item.eventOrderThrough) return 0;
+  const qty=Number(item.eventOrderQty || 0);
+  return Number.isFinite(qty) && qty>0 ? qty : 0;
+}
+
 function currentCycleLabel(date=new Date()){
   return currentTruckCycle(date)==='friday'
     ? 'Thursday Order · Friday Delivery'
@@ -552,9 +567,9 @@ function activeBuildTo(item){
   return DELIVERY_PARS[currentTruckCycle()][normalizeName(item.name)];
 }
 
-function countUnitLabel(item){
+function countUnitLabel(item, quantity=activeBuildTo(item)){
   const unit=item.countUnit || 'case';
-  if(activeBuildTo(item)===1 || unit==='each') return unit;
+  if(quantity===1 || unit==='each') return unit;
   if(unit.endsWith('box')) return unit.slice(0,-3)+'boxes';
   return unit+'s';
 }
@@ -586,12 +601,12 @@ function renderContent(){
 function renderCard(item){
   const oh = getOnHand(item.id);
   const buildTo=activeBuildTo(item);
-  const qty = item.eventDriven ? 0 : calcOrder(buildTo, oh);
+  const qty = item.eventDriven ? activeEventOrderQty(item) : calcOrder(buildTo, oh);
   const needsOrder = qty !== null && qty > 0;
-  const orderText = item.eventDriven ? '0' : qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
   const parField = item.eventDriven
-    ? '<div class="field-static event-status">Event-driven</div>'
+    ? `<div class="field-static event-status">Event-driven<span class="field-unit">${countUnitLabel(item,qty)}</span></div>`
     : `<div class="field-static">${buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
   const countField = `<input type="number" min="0" step="0.5"
       value="${oh}"
@@ -629,9 +644,9 @@ function updateItem(id, val){
   if(!item) return;
 
   const oh = val==='' ? '' : parseFloat(val);
-  const qty = item.eventDriven ? 0 : calcOrder(activeBuildTo(item), oh);
+  const qty = item.eventDriven ? activeEventOrderQty(item) : calcOrder(activeBuildTo(item), oh);
   const needsOrder = qty!==null && qty>0;
-  const orderText = item.eventDriven ? '0' : qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
 
   document.getElementById(`oq-${id}`).textContent = orderText;
@@ -650,7 +665,14 @@ function updateStats(){
     for(const item of cat.items){
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined){ uncounted++; continue; }
-      if(item.eventDriven){ stocked++; continue; }
+      if(item.eventDriven){
+        const qty=activeEventOrderQty(item);
+        if(qty>0){
+          need++; catNeed++;
+          vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
+        } else { stocked++; }
+        continue;
+      }
       const qty=calcOrder(activeBuildTo(item), oh);
       if(qty>0){
         need++; catNeed++;
@@ -854,10 +876,9 @@ function buildVendorPanel(){
   const vendorMap={};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
-      if(item.eventDriven) continue;
       const oh=getOnHand(item.id);
       if(oh===''||oh===undefined) continue;
-      const qty=calcOrder(activeBuildTo(item), oh);
+      const qty=item.eventDriven ? activeEventOrderQty(item) : calcOrder(activeBuildTo(item), oh);
       if(qty>0){
         if(!vendorMap[item.vendor]) vendorMap[item.vendor]=[];
         vendorMap[item.vendor].push({...item, orderQty:qty});
@@ -894,8 +915,11 @@ function resetAll(){
       if(inp) inp.value='';
       const oq=document.getElementById(`oq-${item.id}`);
       if(oq){
-        oq.textContent=item.eventDriven ? '0' : '–';
-        oq.className=item.eventDriven ? 'order-qty zero' : 'order-qty empty';
+        const eventQty=item.eventDriven ? activeEventOrderQty(item) : 0;
+        oq.textContent=item.eventDriven ? eventQty : '–';
+        oq.className=item.eventDriven
+          ? `order-qty ${eventQty>0?'positive':'zero'}`
+          : 'order-qty empty';
       }
       const card=document.getElementById(`card-${item.id}`);
       if(card) card.className='item-card';
@@ -982,12 +1006,15 @@ async function generateOrder(){
 
   // Collect on-hand counts: {itemName: onHandValue}
   const counts = {};
+  const eventOrders = {};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
       const oh = getOnHand(item.id);
       if(oh !== '' && oh !== undefined && oh !== null){
         counts[item.name] = parseFloat(oh);
       }
+      const eventQty=activeEventOrderQty(item);
+      if(eventQty>0) eventOrders[item.name]=eventQty;
     }
   }
 
@@ -1001,6 +1028,7 @@ async function generateOrder(){
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
         counts,
+        eventOrders,
         truckCycle:currentTruckCycle(),
       }),
     });

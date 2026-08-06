@@ -175,9 +175,10 @@ def save_inventory_snapshot(on_hand, canonical_items):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_data(on_hand, truck_cycle="friday"):
+def load_data(on_hand, truck_cycle="friday", event_orders=None):
     """
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
+    event_orders: explicit count-unit quantities for event-driven items
     Returns canonical_items list + best_prices dict
     """
     normalized_on_hand = {}
@@ -188,6 +189,16 @@ def load_data(on_hand, truck_cycle="friday"):
             or name.lower().strip() == canonical_name
         ):
             normalized_on_hand[canonical_name] = qty
+
+    normalized_event_orders = {}
+    for name, qty in (event_orders or {}).items():
+        canonical_name = canonical_inventory_name(name)
+        try:
+            numeric_qty = float(qty)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(numeric_qty) and numeric_qty > 0:
+            normalized_event_orders[canonical_name] = numeric_qty
 
     raw_items = sb_get_all(
         "items?select=id,name,category_id,pack_size,par_level,"
@@ -212,7 +223,7 @@ def load_data(on_hand, truck_cycle="friday"):
 
         oh = normalized_on_hand.get(lower_name)
         if event_driven:
-            qty = 0.0
+            qty = normalized_event_orders.get(lower_name, 0.0)
         elif oh is not None:
             qty = max(0.0, math.ceil(par - float(oh)))
         else:
@@ -1133,9 +1144,15 @@ class handler(BaseHTTPRequestHandler):
         if isinstance(raw.get("counts"), dict):
             count_source = raw["counts"]
             truck_cycle = str(raw.get("truckCycle") or "friday").lower()
+            event_order_source = (
+                raw.get("eventOrders")
+                if isinstance(raw.get("eventOrders"), dict)
+                else {}
+            )
         else:
             count_source = raw
             truck_cycle = "friday"
+            event_order_source = {}
 
         # Normalise keys to lowercase
         on_hand = {
@@ -1145,7 +1162,9 @@ class handler(BaseHTTPRequestHandler):
         }
 
         try:
-            canonical_items, best_prices = load_data(on_hand, truck_cycle)
+            canonical_items, best_prices = load_data(
+                on_hand, truck_cycle, event_order_source
+            )
             save_inventory_snapshot(on_hand, canonical_items)   # persist count for food cost
             assignment, dropped, unassigned, notes, filler_cases = optimize_basket(canonical_items, best_prices)
             savings_rows, total_saved = compute_savings(assignment, canonical_items, best_prices)
