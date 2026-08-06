@@ -472,6 +472,23 @@ mutation SubmitOrder(
 }
 """
 
+_GQL_UPDATE = """
+mutation UpdateOrder(
+  $order: OrderInputV2!
+  $isPatching: Boolean
+  $punchoutSessionContext: PunchOutSessionContextInput
+) {
+  updateOrderV2(
+    order: $order
+    isPatching: $isPatching
+    punchoutSessionContext: $punchoutSessionContext
+  ) {
+    sequenceId
+    lineItems { id productId qty soldAs deliveryDate }
+  }
+}
+"""
+
 _GQL_ORDER_HEADERS = """
 query GetOrderHeadersV2($headerFilter: HeaderFilterV2!) {
   getOrderHeadersV2(params: $headerFilter) {
@@ -508,10 +525,10 @@ query GetUserConfig(
 """
 
 _GQL_ORDER = """
-query GetOrderV2($orderId: String!) {
+query GetOrderV2($orderId: String!, $forceLatestPrice: Boolean) {
   getOrderV2(
     id: $orderId
-    forceLatestPrice: true
+    forceLatestPrice: $forceLatestPrice
     includeSubs: false
   ) {
     id
@@ -520,12 +537,15 @@ query GetOrderV2($orderId: String!) {
     poNumber
     deliveryInstructions
     status
+    modifiedDate
     deliveryDate
     orderSource
     originatedOrderSource
     invoiceSeparate
     shippingCondition
     sequenceId
+    isLatest
+    isPriceSynced
     deliveryType
     caseEachLineItems {
       caseItem {
@@ -709,6 +729,8 @@ def _submit_created_order(
     fallback_delivery_date=None,
 ):
     submit_order = _submit_order_input(created)
+    if submit_order.get("sequenceId") is not None:
+        submit_order["sequenceId"] = int(submit_order["sequenceId"]) + 1
     submit_response = gql(
         bearer,
         "SubmitOrder",
@@ -738,6 +760,64 @@ def _submit_created_order(
             or fallback_delivery_date
         ),
     }
+
+
+def _update_open_order(bearer, ctx, order):
+    """Advance an open cart to the current version before submission."""
+    update_order = _submit_order_input(order)
+    update_order.pop("submissionTime", None)
+    if order.get("isPriceSynced") is False:
+        update_order["sequenceId"] = int(order.get("sequenceId") or 0) + 1
+    response = gql(
+        bearer,
+        "UpdateOrder",
+        _GQL_UPDATE,
+        {
+            "order": update_order,
+            "isPatching": False,
+        },
+        ctx=ctx,
+    )
+    updated = ((response.get("data") or {}).get("updateOrderV2") or {})
+    if updated.get("sequenceId") is None:
+        raise RuntimeError("Sysco updateOrderV2 returned no cart version")
+    order["sequenceId"] = updated["sequenceId"]
+    return order
+
+
+def _get_open_order(bearer, ctx, order_id, force_latest_price=False):
+    response = gql(
+        bearer,
+        "GetOrderV2",
+        _GQL_ORDER,
+        {
+            "orderId": order_id,
+            "forceLatestPrice": force_latest_price,
+        },
+        ctx=ctx,
+        request_type="read",
+    )
+    return (response.get("data") or {}).get("getOrderV2") or {}
+
+
+def _sync_open_order_prices(bearer, ctx, order):
+    if order.get("isPriceSynced") is True:
+        return order
+    forced = _get_open_order(bearer, ctx, order["id"], force_latest_price=True)
+    if forced.get("isLatest") is True and forced.get("isPriceSynced") is True:
+        return forced
+    refreshed = forced
+    for _ in range(10):
+        time.sleep(1)
+        refreshed = _get_open_order(
+            bearer,
+            ctx,
+            order["id"],
+            force_latest_price=False,
+        )
+        if refreshed.get("isLatest") is True and refreshed.get("isPriceSynced") is True:
+            return refreshed
+    return refreshed
 
 
 def resume_sysco_order(items):
@@ -822,15 +902,7 @@ def resume_sysco_order(items):
 
     matching = []
     for order_id in candidate_ids:
-        order_response = gql(
-            bearer,
-            "GetOrderV2",
-            _GQL_ORDER,
-            {"orderId": order_id},
-            ctx=ctx,
-            request_type="read",
-        )
-        order = (order_response.get("data") or {}).get("getOrderV2") or {}
+        order = _get_open_order(bearer, ctx, order_id)
         header_sequence = (headers_by_id.get(order_id) or {}).get("sequenceId")
         order_sequence = order.get("sequenceId")
         if (
@@ -854,7 +926,11 @@ def resume_sysco_order(items):
         raise RuntimeError(
             f"Found {len(matching)} exact matching open Sysco drafts; nothing submitted"
         )
-    return _submit_created_order(bearer, ctx, matching[0])
+    current = _sync_open_order_prices(bearer, ctx, matching[0])
+    if _item_fingerprint(_draft_items(current)) != requested_fingerprint:
+        raise RuntimeError("Sysco cart changed while pricing synchronized; nothing submitted")
+    current = _update_open_order(bearer, ctx, current)
+    return _submit_created_order(bearer, ctx, current)
 
 
 def place_sysco_order(items):

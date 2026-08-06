@@ -220,6 +220,8 @@ class SyscoOrderSubmissionTests(unittest.TestCase):
             "deliveryDate": 1785801600000,
             "shippingCondition": "GROUND",
             "sequenceId": 2,
+            "isLatest": True,
+            "isPriceSynced": True,
             "caseEachLineItems": [{
                 "caseItem": {
                     "id": "line-existing",
@@ -245,6 +247,10 @@ class SyscoOrderSubmissionTests(unittest.TestCase):
                 "sequenceId": 3,
             }]}}},
             {"data": {"getOrderV2": draft}},
+            {"data": {"updateOrderV2": {
+                "sequenceId": 4,
+                "lineItems": [],
+            }}},
             {"data": {"submitOrderV2": {"orders": [{
                 "name": "confirmation-1",
                 "deliveryDate": 1785801600000,
@@ -263,13 +269,16 @@ class SyscoOrderSubmissionTests(unittest.TestCase):
         self.assertEqual("draft-existing", result["orderId"])
         operations = [entry.args[1] for entry in gql_call.call_args_list]
         self.assertEqual(
-            ["GetUserConfig", "GetOrderHeadersV2", "GetOrderV2", "SubmitOrder"],
+            [
+                "GetUserConfig", "GetOrderHeadersV2", "GetOrderV2",
+                "UpdateOrder", "SubmitOrder",
+            ],
             operations,
         )
         self.assertNotIn("CreateOrder", operations)
-        submit_order = gql_call.call_args_list[3].args[3]["order"]
+        submit_order = gql_call.call_args_list[4].args[3]["order"]
         self.assertEqual("GROUND", submit_order["shippingCondition"])
-        self.assertEqual(3, submit_order["sequenceId"])
+        self.assertEqual(5, submit_order["sequenceId"])
 
 
 class PfgOrderSubmissionTests(unittest.TestCase):
