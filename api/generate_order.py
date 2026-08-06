@@ -178,7 +178,7 @@ def save_inventory_snapshot(on_hand, canonical_items):
 def load_data(on_hand, truck_cycle="friday", event_orders=None):
     """
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
-    event_orders: explicit count-unit quantities for event-driven items
+    event_orders: explicit count-unit additions for the active delivery cycle
     Returns canonical_items list + best_prices dict
     """
     normalized_on_hand = {}
@@ -222,14 +222,15 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
         par = 0.0 if event_driven or configured_par is None else configured_par
 
         oh = normalized_on_hand.get(lower_name)
+        event_qty = normalized_event_orders.get(lower_name, 0.0)
         if event_driven:
-            qty = normalized_event_orders.get(lower_name, 0.0)
+            qty = event_qty
         elif oh is not None:
-            qty = max(0.0, math.ceil(par - float(oh)))
+            qty = max(0.0, math.ceil(par - float(oh))) + event_qty
         else:
             # The kitchen inventory sheet is authoritative. Database-only items
             # must not silently become orders when the staff could not count them.
-            qty = 0.0
+            qty = event_qty
 
         canonical_items.append({
             "id":            can_id,

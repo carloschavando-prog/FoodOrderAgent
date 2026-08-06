@@ -98,6 +98,39 @@ class EventDrivenItemTests(unittest.TestCase):
             self.assertEqual(by_name[name]["par_level"], 0)
             self.assertEqual(by_name[name]["order_qty"], quantity)
 
+    def test_explicit_party_orders_are_added_to_standing_shortages(self):
+        item_rows = [
+            {
+                "id": 82,
+                "name": "Chicken Wings",
+                "category_id": 6,
+                "pack_size": "40 LB",
+                "par_level": 7,
+                "preferred_vendor_id": 1,
+            },
+            {
+                "id": 122,
+                "name": "Tenders",
+                "category_id": 7,
+                "pack_size": "2/5 LB",
+                "par_level": 12,
+                "preferred_vendor_id": 2,
+            },
+        ]
+        counts = {"Chicken Wings": 5, "Tenders": 10}
+        additions = {"Chicken Wings": 3, "Tenders": 3}
+
+        with patch.object(
+            generate_order, "sb_get_all", side_effect=[item_rows, []]
+        ):
+            canonical_items, _ = generate_order.load_data(
+                counts, "friday", additions
+            )
+
+        by_name = {item["name"]: item for item in canonical_items}
+        self.assertEqual(by_name["Chicken Wings"]["order_qty"], 5)
+        self.assertEqual(by_name["Tenders"]["order_qty"], 5)
+
     def test_party_proteins_convert_five_pound_bags_to_vendor_cases(self):
         cases = {
             "JTM Taco Meat": (21, 20, 4, 6),
@@ -124,6 +157,25 @@ class EventDrivenItemTests(unittest.TestCase):
                 self.assertEqual(pricing["units_per_case"], bags_per_case)
                 self.assertEqual(cases_required(item, pricing), expected_cases)
 
+    def test_two_salsa_cases_are_recorded_as_eight_individual_containers(self):
+        item = {
+            "name": "Fire Roasted Salsa",
+            "category_id": 4,
+            "order_qty": 8,
+        }
+        item["count_unit"] = count_unit_for_item(item)
+        pricing = {
+            "unit_basis": "oz",
+            "unit_quantity": 4 * 68,
+            "pack_size": "4/68 OZ",
+            "unit_note": "",
+        }
+        pricing["units_per_case"] = units_per_case(item, pricing)
+
+        self.assertEqual(item["count_unit"], "each")
+        self.assertEqual(pricing["units_per_case"], 4)
+        self.assertEqual(cases_required(item, pricing), 2)
+
     def test_event_driven_counts_are_rendered_and_persisted(self):
         render_card = self._ui_function("renderCard", "updateItem")
         collect_counts = self._ui_function(
@@ -140,7 +192,7 @@ class EventDrivenItemTests(unittest.TestCase):
         self.assertNotIn("if(item.eventDriven) continue;", load_snapshot)
         self.assertNotIn("if(item.eventDriven) continue;", generate_order)
         self.assertIn("eventOrders", generate_order)
-        self.assertIn("activeEventOrderQty(item)", render_card)
+        self.assertIn("calculatedOrderQty(item,oh)", render_card)
 
     def test_active_sheet_lists_current_party_quantities(self):
         self.assertIn(
@@ -157,6 +209,29 @@ class EventDrivenItemTests(unittest.TestCase):
             'name:"JTM Taco Meat",              buildTo:null,eventDriven:true, '
             'eventOrderQty:21',
             self.index_source,
+        )
+        for name, quantity in (
+            ("Broccoli", 1),
+            ("Assorted Peppers", 1),
+            ("Cherry Tomatoes", 1),
+            ("Sour Cream", 1),
+        ):
+            with self.subTest(name=name):
+                self.assertRegex(
+                    self.index_source,
+                    rf'name:"{name}"[^\n]+eventOrderQty:{quantity}',
+                )
+        self.assertRegex(
+            self.index_source,
+            r'name:"Chicken Wings"[^\n]+eventOrderQty:3',
+        )
+        self.assertRegex(
+            self.index_source,
+            r'name:"Tenders"[^\n]+eventOrderQty:3',
+        )
+        self.assertRegex(
+            self.index_source,
+            r'name:"Fire Roasted Salsa"[^\n]+eventOrderQty:8',
         )
 
 

@@ -375,7 +375,7 @@ const CATEGORIES = [
       {id:42, name:"Cholula",                    buildTo:1,  vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ",    countUnit:"each"},
       {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G",     countUnit:"case"},
       {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL",    countUnit:"gallon"},
-      {id:47, name:"Fire Roasted Salsa",         buildTo:null,eventDriven:true, vendor:"US FOODS", price:53.28, unit:"4/68 OZ", countUnit:"each"},
+      {id:47, name:"Fire Roasted Salsa",         buildTo:null,eventDriven:true, eventOrderQty:8,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:53.28, unit:"4/68 OZ", countUnit:"each"},
       {id:50, name:"Black Beans",                buildTo:null,eventDriven:true, eventOrderQty:13,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG", price:91.25, unit:"24/15.5oz", countUnit:"#10 can"},
       {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB",      countUnit:"case"},
       {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB",   countUnit:"bag"},
@@ -404,16 +404,16 @@ const CATEGORIES = [
     id:"walkin", name:"Walk-In Cooler", icon:"❄️",
     items:[
       {id:72, name:"Baby Carrots",               buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.90, unit:"4/5 LB"},
-      {id:73, name:"Broccoli",                   buildTo:null,eventDriven:true, vendor:"PFG",      price:35.89, unit:"20 LB"},
+      {id:73, name:"Broccoli",                   buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG",      price:35.89, unit:"20 LB"},
       {id:74, name:"Green Onions",               buildTo:2,  vendor:"US FOODS",   price:23.37,  unit:"4/2 LB"},
       {id:75, name:"Cucumbers",                  buildTo:null,eventDriven:true, vendor:"PFG",      price:10.32, unit:"12 EA"},
       {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
       {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
       {id:79, name:"Burger Patties",             buildTo:5,  tuesdayBuildTo:3, fridayBuildTo:5, vendor:"PFG", price:64.22, unit:"48/4 OZ"},
       {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  tuesdayBuildTo:3, fridayBuildTo:4, vendor:"US FOODS", price:94.75, unit:"4/5 LB", countUnit:"5-pound bag"},
-      {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, vendor:"US FOODS", price:51.38, unit:"40 LB"},
-      {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
-      {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
+      {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, eventOrderQty:3,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:51.38, unit:"40 LB"},
+      {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:22.63, unit:"5 LB"},
+      {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:27.92, unit:"10 LB"},
       {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#",       countUnit:"5-pound pack"},
       {id:92, name:"Pecorino Romano Blend",      buildTo:1,  vendor:"PFG",        price:110.05, unit:"4/5 LB",     countUnit:"5-pound bag"},
       {id:93, name:"Parmesan Cheese",            buildTo:1,  vendor:"US FOODS",   price:63.98,  unit:"2/5 LB",     countUnit:"5-pound bag"},
@@ -428,7 +428,7 @@ const CATEGORIES = [
       {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
       {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL", countUnit:"gallon"},
       {id:237,name:"Simple Syrup",               buildTo:10, vendor:"HOUSE BUILD", price:null,   unit:"HOUSE MADE", countUnit:"gallon", houseBuild:true},
-      {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
+      {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
       {id:111,name:"Pickles",                    buildTo:1,  vendor:"PFG",        price:35.68,  unit:"5 GAL"},
       {id:112,name:"Bacon Toppings",             buildTo:2,  vendor:"US FOODS",   price:82.59,  unit:"2/5 LB"},
       {id:113,name:"Sliced Bacon",               buildTo:3,  vendor:"PFG",        price:76.44,  unit:"15 LB"},
@@ -444,7 +444,7 @@ const CATEGORIES = [
       {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG",      price:63.16, unit:"2/5 LB", countUnit:"5-pound bag"},
       {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
       {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:74.17, unit:"4/5 LB", countUnit:"5-pound bag"},
-      {id:122,name:"Tenders",                    buildTo:12, tuesdayBuildTo:8, fridayBuildTo:12, vendor:"PFG", price:32.98, unit:"2/5 LB"},
+      {id:122,name:"Tenders",                    buildTo:12, tuesdayBuildTo:8, fridayBuildTo:12, eventOrderQty:3,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG", price:32.98, unit:"2/5 LB"},
       {id:125,name:"Milwaukee Pretzel",          buildTo:12, tuesdayBuildTo:7, fridayBuildTo:12, vendor:"US FOODS", price:58.25, unit:"8/24 OZ"},
       {id:128,name:"Tater Kegs",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:41.37, unit:"10 LB"},
       {id:236,name:"Variety Dessert Bars",       buildTo:null,eventDriven:true, vendor:"SYSCO ONLY", price:null, unit:"8/8 CT"},
@@ -549,11 +549,18 @@ function localIsoDate(date=new Date()){
 }
 
 function activeEventOrderQty(item, date=new Date()){
-  if(!item.eventDriven) return 0;
   if(item.eventOrderCycle && item.eventOrderCycle!==currentTruckCycle(date)) return 0;
   if(item.eventOrderThrough && localIsoDate(date)>item.eventOrderThrough) return 0;
   const qty=Number(item.eventOrderQty || 0);
   return Number.isFinite(qty) && qty>0 ? qty : 0;
+}
+
+function calculatedOrderQty(item, raw, date=new Date()){
+  const eventQty=activeEventOrderQty(item,date);
+  if(item.eventDriven) return eventQty;
+  const standingQty=calcOrder(activeBuildTo(item),raw);
+  if(standingQty===null) return eventQty>0 ? eventQty : null;
+  return standingQty+eventQty;
 }
 
 function currentCycleLabel(date=new Date()){
@@ -601,7 +608,7 @@ function renderContent(){
 function renderCard(item){
   const oh = getOnHand(item.id);
   const buildTo=activeBuildTo(item);
-  const qty = item.eventDriven ? activeEventOrderQty(item) : calcOrder(buildTo, oh);
+  const qty = calculatedOrderQty(item,oh);
   const needsOrder = qty !== null && qty > 0;
   const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
@@ -644,7 +651,7 @@ function updateItem(id, val){
   if(!item) return;
 
   const oh = val==='' ? '' : parseFloat(val);
-  const qty = item.eventDriven ? activeEventOrderQty(item) : calcOrder(activeBuildTo(item), oh);
+  const qty = calculatedOrderQty(item,oh);
   const needsOrder = qty!==null && qty>0;
   const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
   const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
@@ -664,16 +671,9 @@ function updateStats(){
     let catNeed=0;
     for(const item of cat.items){
       const oh=getOnHand(item.id);
-      if(oh===''||oh===undefined){ uncounted++; continue; }
-      if(item.eventDriven){
-        const qty=activeEventOrderQty(item);
-        if(qty>0){
-          need++; catNeed++;
-          vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
-        } else { stocked++; }
-        continue;
-      }
-      const qty=calcOrder(activeBuildTo(item), oh);
+      const eventQty=activeEventOrderQty(item);
+      if((oh===''||oh===undefined) && eventQty<=0){ uncounted++; continue; }
+      const qty=calculatedOrderQty(item,oh);
       if(qty>0){
         need++; catNeed++;
         vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
@@ -877,8 +877,7 @@ function buildVendorPanel(){
   for(const cat of CATEGORIES){
     for(const item of cat.items){
       const oh=getOnHand(item.id);
-      if(oh===''||oh===undefined) continue;
-      const qty=item.eventDriven ? activeEventOrderQty(item) : calcOrder(activeBuildTo(item), oh);
+      const qty=calculatedOrderQty(item,oh);
       if(qty>0){
         if(!vendorMap[item.vendor]) vendorMap[item.vendor]=[];
         vendorMap[item.vendor].push({...item, orderQty:qty});
@@ -915,14 +914,15 @@ function resetAll(){
       if(inp) inp.value='';
       const oq=document.getElementById(`oq-${item.id}`);
       if(oq){
-        const eventQty=item.eventDriven ? activeEventOrderQty(item) : 0;
-        oq.textContent=item.eventDriven ? eventQty : '–';
-        oq.className=item.eventDriven
-          ? `order-qty ${eventQty>0?'positive':'zero'}`
-          : 'order-qty empty';
+        const qty=calculatedOrderQty(item,'');
+        oq.textContent=item.eventDriven ? qty : qty===null ? '–' : qty;
+        oq.className=`order-qty ${qty===null?'empty':qty>0?'positive':'zero'}`;
       }
       const card=document.getElementById(`card-${item.id}`);
-      if(card) card.className='item-card';
+      if(card){
+        const qty=calculatedOrderQty(item,'');
+        card.className=`item-card${qty!==null&&qty>0?' needs-order':''}`;
+      }
     }
   }
   updateStats();
