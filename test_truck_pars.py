@@ -147,7 +147,7 @@ class TruckParTests(unittest.TestCase):
             "potato hamburger bun": 2,
             "fries": 10,
             "flatbread dough": 5,
-            "milwaukee pretzel": 6,
+            "milwaukee pretzel": 7,
             "pizza cheese": 5,
             "tenders": 8,
         }
@@ -163,7 +163,7 @@ class TruckParTests(unittest.TestCase):
             "potato hamburger bun": 6,
             "fries": 13,
             "flatbread dough": 6,
-            "milwaukee pretzel": 20,
+            "milwaukee pretzel": 12,
             "pizza cheese": 10,
             "tenders": 12,
         }

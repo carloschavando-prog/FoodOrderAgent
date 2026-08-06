@@ -97,7 +97,7 @@ BASE_PAR_LEVELS = {
     "pepperoni": 4.0,
     "beer cheese dip": 12.0,
     "tenders": 12.0,
-    "milwaukee pretzel": 20.0,
+    "milwaukee pretzel": 12.0,
     "eco lyzer": 1.0,
     "delimer": 3.0,
     "oven cleaner": 3.0,
@@ -135,6 +135,8 @@ BASE_PAR_LEVELS = {
 # Tuesday cases and 5 Friday cases; each delivery PAR includes a 1-case buffer.
 # Chicken Tender Platters use 5 tenders each, with 75 tenders per case. The
 # latest peaks round to 7 Tuesday cases and 11 Friday cases, plus 1 buffer case.
+# Milwaukee Pretzels come 8 per case. The latest six-window peaks require 7
+# Tuesday cases and 12 Friday cases.
 # Wrap ingredients use 1 tortilla and
 # 4 cooked ounces of chicken per wrap; pizza cheese uses 5 ounces per cheese
 # or pepperoni pizza. Tortillas and cheese receive the established 25% build
@@ -146,7 +148,7 @@ TUESDAY_PAR_OVERRIDES = {
     "double lobe chicken breasts": 3.0,
     "flatbread dough": 5.0,
     "fries": 10.0,
-    "milwaukee pretzel": 6.0,
+    "milwaukee pretzel": 7.0,
     "ope sauce": 6.0,
     "pizza cheese": 5.0,
     "potato hamburger bun": 2.0,
@@ -161,7 +163,7 @@ FRIDAY_PAR_OVERRIDES = {
     "double lobe chicken breasts": 4.0,
     "flatbread dough": 6.0,
     "fries": 13.0,
-    "milwaukee pretzel": 20.0,
+    "milwaukee pretzel": 12.0,
     "pizza cheese": 10.0,
     "potato hamburger bun": 6.0,
     "tenders": 12.0,
