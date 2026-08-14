@@ -24,8 +24,8 @@ API_DIR      = os.path.expanduser("~/.FoodOrderAgent/api_captures")
 os.makedirs(API_DIR, exist_ok=True)
 
 PORTAL_URL = "https://shop.sysco.com/auth/login"
-EMAIL      = "carlos@onparbar.com"
-PASSWORD   = "!Compass1066"
+EMAIL = os.getenv("SYSCO_EMAIL", "")
+PASSWORD = os.getenv("SYSCO_PASSWORD", "")
 
 all_requests  = []
 api_responses = {}  # url -> list of bodies (multiple calls to same endpoint)

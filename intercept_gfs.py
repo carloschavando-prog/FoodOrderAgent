@@ -19,8 +19,8 @@ API_DIR      = os.path.expanduser("~/.FoodOrderAgent/api_captures")
 os.makedirs(API_DIR, exist_ok=True)
 
 PORTAL_URL = "https://order.gfs.com/home"
-EMAIL      = "cchavando@onparbar.com"
-PASSWORD   = "!Onpar4464"
+EMAIL = os.getenv("GFS_EMAIL", "")
+PASSWORD = os.getenv("GFS_PASSWORD", "")
 
 all_requests  = []   # list of {method, url, headers, body}
 api_responses = {}   # url -> response body

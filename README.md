@@ -51,13 +51,20 @@ Each scraper:
 | `GH_PAT` | Secret | GitHub PAT with repo secrets write permission |
 | `USF_REFRESH_TOKEN` | Secret | US Foods refresh token (auto-rotated each run) |
 | `USF_CONFIG` | Secret | US Foods static config JSON |
+| `USF_EMAIL` | Secret | US Foods account identifier used only for token recovery |
+| `USF_PASSWORD` | Secret | US Foods password used only for token recovery |
 | `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
 | `PFG_CONFIG` | Secret | PFG static config JSON |
 | `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs2.py`) |
-| `SYSCO_EMAIL` | Secret | Sysco login email (`carlos@onparbar.com`) |
+| `SYSCO_EMAIL` | Secret | Sysco login email |
 | `SYSCO_PASSWORD` | Secret | Sysco login password |
 | `SYSCO_COOKIES` | Secret | Sysco session cookies JSON — fast path that bypasses Okta (refresh by running `intercept_sysco5.py`) |
 | `PRICE_SEASON` | Variable | Season label for price_lists table (e.g. `Spring 2026`) |
+
+Run **Actions → Scrape Vendor Prices → Run workflow**, select
+`auth-health`, and choose `sysco`, `usf`, or `both` for a read-only login and
+order-guide check. Authentication health checks never write prices, add cart
+items, or submit orders.
 
 ---
 

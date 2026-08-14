@@ -19,6 +19,8 @@ Supabase credentials:
 """
 import json, os, sys, uuid, time, subprocess, urllib.request, urllib.error, datetime
 
+from usf_auth import USFAuthError, apply_b2c_result, password_grant, refresh_grant
+
 # ── Config ────────────────────────────────────────────────
 SB_URL    = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY    = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
@@ -162,11 +164,11 @@ def usf_request(method, path, bearer, payload=None, params=None):
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"  ❌ API ERROR {method} {path} ({e.code}): {body[:300]}")
-        raise
+        raise USFAuthError(
+            f"US Foods API rejected {method} {path} (HTTP {e.code})."
+        ) from None
 
-def refresh_token(config):
+def refresh_panamax_token(config):
     """Exchange refresh token for new Bearer + refresh token. Updates config in place."""
     print("→ Refreshing Bearer token...")
     url = f"{API_BASE}/auth-api/v1/oauth/token"
@@ -194,16 +196,24 @@ def refresh_token(config):
         with urllib.request.urlopen(req, timeout=15) as r:
             resp = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"  ❌ Token refresh failed ({e.code}): {body[:200]}")
-        raise
+        raise USFAuthError(
+            f"US Foods Panamax refresh was rejected (HTTP {e.code})."
+        ) from None
 
     bearer = f"{resp['tokenType']} {resp['accessToken']}"
     config["refresh_token"] = resp["refreshToken"]   # chain refreshes
-    config["bearer"]        = bearer
-    save_config(config)
     print(f"  ✅ Bearer token refreshed (expires in {resp.get('expiresIn', '?')}s)")
     return bearer
+
+
+def refresh_token(config):
+    """Refresh through the provider recorded in the secret configuration."""
+    if config.get("refresh_provider") == "b2c":
+        result = refresh_grant(config.get("refresh_token", ""))
+        bearer = apply_b2c_result(config, result)
+        print("  ✅ US Foods B2C token refreshed")
+        return bearer
+    return refresh_panamax_token(config)
 
 def get_list_items(bearer, list_id):
     """Fetch all items for the given list ID."""
@@ -274,8 +284,13 @@ def get_prices(bearer, product_numbers, list_id):
 def load_config():
     """Load API config from GitHub Actions env vars or local file."""
     if os.getenv("GITHUB_ACTIONS") == "true":
-        config = json.loads(os.environ["USF_CONFIG"])
-        config["refresh_token"] = os.environ["USF_REFRESH_TOKEN"]
+        try:
+            config = json.loads(os.environ["USF_CONFIG"])
+            config["refresh_token"] = os.environ["USF_REFRESH_TOKEN"]
+        except (KeyError, json.JSONDecodeError) as exc:
+            raise USFAuthError(
+                "USF_CONFIG and USF_REFRESH_TOKEN must be valid GitHub secrets."
+            ) from exc
         print("  Config loaded from GitHub Actions secrets")
         return config
     if not os.path.exists(CONFIG_FILE):
@@ -285,24 +300,80 @@ def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
 
-def save_config(config):
-    """Persist updated refresh token — GitHub secret in CI, local file otherwise."""
-    if os.getenv("GITHUB_ACTIONS") == "true":
-        repo = os.environ.get("GITHUB_REPOSITORY", "")
-        result = subprocess.run(
-            ["gh", "secret", "set", "USF_REFRESH_TOKEN",
-             "-b", config["refresh_token"], "-R", repo],
-            capture_output=True, text=True,
-            env={**os.environ, "GH_TOKEN": os.environ.get("GH_PAT", "")}
+def _set_github_secret(name, value):
+    """Set a GitHub secret through stdin so it never appears in argv or logs."""
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    token = os.environ.get("GH_PAT", "")
+    if not repo or not token:
+        raise USFAuthError(
+            "GITHUB_REPOSITORY and GH_PAT are required to preserve rotated tokens."
         )
-        if result.returncode == 0:
-            print(f"  ✅ USF_REFRESH_TOKEN secret rotated")
-        else:
-            print(f"  ⚠️  Secret rotation failed: {result.stderr[:200]}")
+    result = subprocess.run(
+        ["gh", "secret", "set", name, "-R", repo],
+        input=value,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GH_TOKEN": token},
+    )
+    if result.returncode != 0:
+        raise USFAuthError(f"Failed to update the {name} GitHub secret.")
+
+
+def save_config(config, *, persist_static=False):
+    """Persist rotated auth state without exposing it on the command line."""
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        _set_github_secret("USF_REFRESH_TOKEN", config["refresh_token"])
+        if persist_static:
+            static_config = {
+                key: value
+                for key, value in config.items()
+                if key not in {"refresh_token", "bearer"}
+            }
+            _set_github_secret("USF_CONFIG", json.dumps(static_config))
+        print("  ✅ US Foods authentication secrets rotated")
     else:
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
+
+
+def authenticate(config):
+    """Refresh normally, then recover from username/password if necessary."""
+    try:
+        bearer = refresh_token(config)
+    except USFAuthError as refresh_error:
+        username = os.environ.get("USF_EMAIL", "").strip()
+        password = os.environ.get("USF_PASSWORD", "")
+        if not username or not password:
+            raise refresh_error
+    else:
+        save_config(
+            config,
+            persist_static=config.get("refresh_provider") == "b2c",
+        )
+        return bearer
+
+    print("  ⚠️  Refresh token failed; trying the credential recovery path")
+    candidate = dict(config)
+    result = password_grant(username, password)
+    bearer = apply_b2c_result(candidate, result)
+
+    # Do not promote a different token family until it proves it can read
+    # the ordering catalog. This keeps a failed recovery attempt from
+    # replacing the last-known refresh credentials.
+    list_id = candidate.get("fall_2025_list_id", 1000643297)
+    product_numbers = get_list_items(bearer, list_id)
+    if not product_numbers:
+        raise USFAuthError(
+            "US Foods credential recovery authenticated but could not read "
+            "the ordering list."
+        )
+
+    config.clear()
+    config.update(candidate)
+    save_config(config, persist_static=True)
+    print("  ✅ US Foods credential recovery verified against the ordering list")
+    return bearer
 
 # ── Main ──────────────────────────────────────────────────
 
@@ -314,7 +385,7 @@ def main():
     print(f"Loaded {len(item_map['by_name'])} items ({len(item_map['by_apn'])} with APNs)")
 
     # Refresh Bearer token
-    bearer = refresh_token(config)
+    bearer = authenticate(config)
 
     # Get Fall 2025 product numbers
     list_id  = config.get("fall_2025_list_id", 1000643297)
