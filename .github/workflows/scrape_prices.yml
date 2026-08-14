@@ -47,6 +47,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
+
       - name: Run read-only Sysco authentication check
         env:
           SYSCO_EMAIL: ${{ secrets.SYSCO_EMAIL }}
@@ -66,6 +71,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
 
       - name: Run read-only US Foods authentication check
         env:
@@ -87,6 +97,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
 
       - name: Scrape US Foods prices
         env:
@@ -152,6 +167,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
 
       - name: Scrape Sysco prices
         env:

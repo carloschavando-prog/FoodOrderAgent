@@ -16,12 +16,17 @@ class USFoodsRecoveryTests(unittest.TestCase):
     @mock.patch("scrape_usfoods.save_config")
     @mock.patch("scrape_usfoods.get_list_items", return_value=[101, 202])
     @mock.patch(
-        "scrape_usfoods.password_grant",
-        return_value={
-            "token_type": "Bearer",
-            "access_token": "access-value",
-            "refresh_token": "replacement-refresh",
-        },
+        "browser_auth.usf_password_login",
+        return_value=(
+            "Bearer access-value",
+            {
+                "refresh_token": "replacement-refresh",
+                "auth_context": {"customer": "configured"},
+                "scopes": "ordering",
+                "platform": "DESKTOP",
+                "consumer_id": "ecom",
+            },
+        ),
     )
     @mock.patch(
         "scrape_usfoods.refresh_token",
@@ -30,7 +35,7 @@ class USFoodsRecoveryTests(unittest.TestCase):
     def test_password_recovery_is_validated_before_promotion(
         self,
         _refresh,
-        password_grant,
+        browser_login,
         get_list_items,
         save_config,
     ):
@@ -39,9 +44,9 @@ class USFoodsRecoveryTests(unittest.TestCase):
         bearer = scrape_usfoods.authenticate(config)
 
         self.assertEqual(bearer, "Bearer access-value")
-        self.assertEqual(config["refresh_provider"], "b2c")
+        self.assertNotIn("refresh_provider", config)
         self.assertEqual(config["refresh_token"], "replacement-refresh")
-        password_grant.assert_called_once_with("account-name", "password-value")
+        browser_login.assert_called_once_with("account-name", "password-value")
         get_list_items.assert_called_once_with("Bearer access-value", 123)
         save_config.assert_called_once_with(config, persist_static=True)
 
@@ -53,12 +58,15 @@ class USFoodsRecoveryTests(unittest.TestCase):
     @mock.patch("scrape_usfoods.save_config")
     @mock.patch("scrape_usfoods.get_list_items", return_value=[])
     @mock.patch(
-        "scrape_usfoods.password_grant",
-        return_value={
-            "token_type": "Bearer",
-            "access_token": "access-value",
-            "refresh_token": "replacement-refresh",
-        },
+        "browser_auth.usf_password_login",
+        return_value=(
+            "Bearer access-value",
+            {
+                "refresh_token": "replacement-refresh",
+                "auth_context": {"customer": "configured"},
+                "scopes": "ordering",
+            },
+        ),
     )
     @mock.patch(
         "scrape_usfoods.refresh_token",
@@ -67,7 +75,7 @@ class USFoodsRecoveryTests(unittest.TestCase):
     def test_failed_catalog_validation_preserves_existing_secrets(
         self,
         _refresh,
-        _password_grant,
+        _browser_login,
         _get_list_items,
         save_config,
     ):

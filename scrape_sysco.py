@@ -146,7 +146,7 @@ def _validate_with_cookies(cookie_str):
     return f"Bearer {creds}", shop_account_id, csrf_token, vid
 
 
-def get_bearer_token(email, password, *, allow_cookies=True):
+def _get_bearer_token_http(email, password, *, allow_cookies=True):
     """
     Authenticate via Okta SAML2 step-up flow and return
     (bearer_header, shop_account_id, csrf_token, vid).
@@ -351,6 +351,25 @@ def get_bearer_token(email, password, *, allow_cookies=True):
 
     print(f"  [6] ✅ Sysco authentication succeeded (role={role})")
     return f"Bearer {creds}", shop_account_id, csrf_token, vid
+
+
+def get_bearer_token(email, password, *, allow_cookies=True):
+    """Authenticate through cookies/HTTP, then the current browser UI."""
+    try:
+        return _get_bearer_token_http(
+            email,
+            password,
+            allow_cookies=allow_cookies,
+        )
+    except (OSError, RuntimeError, urllib.error.HTTPError) as http_error:
+        if not email or not password:
+            raise http_error
+        print("  ⚠️  Direct Sysco authentication failed; trying browser login")
+        from browser_auth import sysco_password_login
+
+        result = sysco_password_login(email, password)
+        print("  ✅ Sysco browser authentication succeeded")
+        return result
 
 
 # ── GraphQL helper ────────────────────────────────────────────────────────────

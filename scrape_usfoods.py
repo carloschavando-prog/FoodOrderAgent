@@ -19,7 +19,7 @@ Supabase credentials:
 """
 import json, os, sys, uuid, time, subprocess, urllib.request, urllib.error, datetime
 
-from usf_auth import USFAuthError, apply_b2c_result, password_grant, refresh_grant
+from usf_auth import USFAuthError, apply_b2c_result, refresh_grant
 
 # ── Config ────────────────────────────────────────────────
 SB_URL    = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -353,10 +353,16 @@ def authenticate(config):
         )
         return bearer
 
-    print("  ⚠️  Refresh token failed; trying the credential recovery path")
+    print("  ⚠️  Refresh token failed; trying the browser credential recovery path")
     candidate = dict(config)
-    result = password_grant(username, password)
-    bearer = apply_b2c_result(candidate, result)
+    from browser_auth import BrowserAuthError, usf_password_login
+
+    try:
+        bearer, recovered = usf_password_login(username, password)
+    except BrowserAuthError as exc:
+        raise USFAuthError(str(exc)) from None
+    candidate.update(recovered)
+    candidate.pop("refresh_provider", None)
 
     # Do not promote a different token family until it proves it can read
     # the ordering catalog. This keeps a failed recovery attempt from
@@ -372,7 +378,7 @@ def authenticate(config):
     config.clear()
     config.update(candidate)
     save_config(config, persist_static=True)
-    print("  ✅ US Foods credential recovery verified against the ordering list")
+    print("  ✅ US Foods browser recovery verified against the ordering list")
     return bearer
 
 # ── Main ──────────────────────────────────────────────────
