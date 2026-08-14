@@ -99,10 +99,12 @@ def sysco_password_login(email, password):
     sync_playwright = _playwright()
     with sync_playwright() as playwright:
         browser, context = _launch_context(playwright)
+        stage = "open-login"
         try:
             page = context.new_page()
             page.goto(SYSCO_LOGIN_URL, wait_until="domcontentloaded", timeout=45_000)
 
+            stage = "submit-username"
             username = page.get_by_role(
                 "textbox", name=re.compile(r"email or username", re.I)
             ).first
@@ -110,13 +112,16 @@ def sysco_password_login(email, password):
             username.fill(email)
             page.get_by_role("button", name="Next", exact=True).click()
 
+            stage = "wait-for-password"
             password_box = page.locator(
                 "input[type='password'], input[name='credentials.passcode']"
             ).first
             password_box.wait_for(state="visible", timeout=30_000)
+            stage = "submit-password"
             password_box.fill(password)
             password_box.press("Enter")
 
+            stage = "validate-customer-session"
             deadline = time.monotonic() + 45
             while time.monotonic() < deadline:
                 response = context.request.get(
@@ -131,7 +136,7 @@ def sysco_password_login(email, password):
                 if response.ok:
                     try:
                         return _sysco_result(response.json())
-                    except BrowserAuthError:
+                    except (BrowserAuthError, ValueError, json.JSONDecodeError):
                         pass
 
                 if password_box.is_visible():
@@ -160,7 +165,8 @@ def sysco_password_login(email, password):
             raise
         except Exception as exc:
             raise BrowserAuthError(
-                f"Sysco browser authentication failed ({type(exc).__name__})."
+                "Sysco browser authentication failed during "
+                f"{stage} ({type(exc).__name__})."
             ) from None
         finally:
             browser.close()
@@ -197,6 +203,7 @@ def usf_password_login(username, password):
     with sync_playwright() as playwright:
         browser, context = _launch_context(playwright)
         capture = {}
+        stage = "open-user-id-page"
         try:
             page = context.new_page()
 
@@ -216,6 +223,7 @@ def usf_password_login(username, password):
             page.on("response", capture_token)
             page.goto(USF_AUTHORIZE_URL, wait_until="domcontentloaded", timeout=45_000)
 
+            stage = "submit-user-id"
             user_id = page.locator(
                 "#signInName, input[placeholder='User ID'], "
                 "input[name*='user'], input[id*='user']"
@@ -226,8 +234,17 @@ def usf_password_login(username, password):
                 "button", name=re.compile(r"^log in$", re.I)
             ).first.click()
 
+            stage = "wait-for-password"
             password_box = page.locator("input[type='password']").first
-            password_box.wait_for(state="visible", timeout=30_000)
+            try:
+                password_box.wait_for(state="visible", timeout=30_000)
+            except Exception:
+                if user_id.is_visible():
+                    raise BrowserAuthError(
+                        "US Foods did not advance past the configured user ID."
+                    ) from None
+                raise
+            stage = "submit-password"
             password_box.fill(password)
 
             submit = page.locator("button[type='submit']:visible").first
@@ -239,6 +256,7 @@ def usf_password_login(username, password):
                 ).first.click()
 
             try:
+                stage = "complete-provider-login"
                 page.wait_for_url(
                     lambda url: "b2clogin.com" not in url,
                     timeout=45_000,
@@ -252,12 +270,14 @@ def usf_password_login(username, password):
                     "US Foods requires an additional interactive sign-in step."
                 ) from None
 
+            stage = "open-ordering-list"
             page.goto(
                 USF_ORDER_LIST_URL,
                 wait_until="domcontentloaded",
                 timeout=45_000,
             )
             deadline = time.monotonic() + 45
+            stage = "capture-renewable-token"
             while time.monotonic() < deadline and "result" not in capture:
                 page.wait_for_timeout(1_000)
             if "result" not in capture:
@@ -269,7 +289,8 @@ def usf_password_login(username, password):
             raise
         except Exception as exc:
             raise BrowserAuthError(
-                f"US Foods browser authentication failed ({type(exc).__name__})."
+                "US Foods browser authentication failed during "
+                f"{stage} ({type(exc).__name__})."
             ) from None
         finally:
             browser.close()
