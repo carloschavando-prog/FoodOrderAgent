@@ -1,4 +1,4 @@
-"""Deterministic tests for the US Foods credential OAuth helper."""
+"""Deterministic tests for the legacy US Foods B2C refresh helper."""
 
 import io
 import json
@@ -23,8 +23,8 @@ class _Response:
         return self.payload
 
 
-class USFoodsPasswordGrantTests(unittest.TestCase):
-    def test_password_grant_uses_supplied_credentials_without_logging(self):
+class USFoodsB2CRefreshTests(unittest.TestCase):
+    def test_refresh_grant_uses_supplied_token_without_logging(self):
         captured = {}
 
         def opener(request, timeout):
@@ -38,20 +38,16 @@ class USFoodsPasswordGrantTests(unittest.TestCase):
                 }
             )
 
-        result = usf_auth.password_grant(
-            "account-name",
-            "password-value",
-            opener=opener,
-        )
+        result = usf_auth.refresh_grant("old-refresh", opener=opener)
 
         self.assertEqual(result["refresh_token"], "refresh-value")
-        self.assertEqual(captured["body"]["username"], ["account-name"])
-        self.assertEqual(captured["body"]["password"], ["password-value"])
+        self.assertEqual(captured["body"]["grant_type"], ["refresh_token"])
+        self.assertEqual(captured["body"]["refresh_token"], ["old-refresh"])
         self.assertEqual(captured["timeout"], 20)
 
-    def test_password_grant_requires_both_secrets(self):
-        with self.assertRaisesRegex(usf_auth.USFAuthError, "USF_EMAIL"):
-            usf_auth.password_grant("", "")
+    def test_refresh_grant_requires_secret(self):
+        with self.assertRaisesRegex(usf_auth.USFAuthError, "USF_REFRESH_TOKEN"):
+            usf_auth.refresh_grant("")
 
     def test_http_error_is_sanitized(self):
         def opener(_request, timeout):
@@ -65,12 +61,12 @@ class USFoodsPasswordGrantTests(unittest.TestCase):
             )
 
         with self.assertRaises(usf_auth.USFAuthError) as caught:
-            usf_auth.password_grant("account-name", "password-value", opener=opener)
+            usf_auth.refresh_grant("old-refresh", opener=opener)
 
         message = str(caught.exception)
         self.assertIn("invalid_grant", message)
         self.assertNotIn("sensitive", message)
-        self.assertNotIn("password-value", message)
+        self.assertNotIn("old-refresh", message)
 
     def test_apply_result_marks_b2c_provider(self):
         config = {"consumer_id": "ecom"}
