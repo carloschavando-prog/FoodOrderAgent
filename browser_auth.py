@@ -312,6 +312,14 @@ def usf_password_login(user_id_value, password, secondary_id=""):
             user_id.click()
             user_id.fill("")
             user_id.type(user_id_value)
+            page.locator("#signInName").evaluate(
+                """(field, value) => {
+                    field.value = value;
+                    field.dispatchEvent(new Event('input', {bubbles: true}));
+                    field.dispatchEvent(new Event('change', {bubbles: true}));
+                }""",
+                user_id_value,
+            )
             user_id.press("Tab")
             page.locator("#next:visible").click()
 
