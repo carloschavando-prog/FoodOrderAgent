@@ -194,9 +194,49 @@ def _usf_candidate(request_payload, request_headers, response_payload):
     return f"{token_type} {access_token}", candidate
 
 
-def usf_password_login(username, password):
+def _classify_usf_credential_step(visible_text, has_visible_password=False):
+    normalized = " ".join(visible_text.lower().split())
+    if re.search(r"secondary\s+(user\s+)?id|secondary\s+identifier", normalized):
+        return "secondary-id"
+    if "enter your password" in normalized or has_visible_password:
+        return "password"
+    return ""
+
+
+def _visible_usf_field(page, step):
+    if step == "secondary-id":
+        selectors = (
+            "input[aria-label*='secondary' i]:visible, "
+            "input[placeholder*='secondary' i]:visible, "
+            "#modal-input:visible, input[name*='secondary' i]:visible"
+        )
+    else:
+        selectors = (
+            "#modal-input:visible, #passwordInput:visible, "
+            "input[type='password']:visible"
+        )
+    field = page.locator(selectors).first
+    field.wait_for(state="visible", timeout=5_000)
+    return field
+
+
+def _click_visible_usf_button(page, names):
+    pattern = re.compile(
+        rf"^({'|'.join(re.escape(name) for name in names)})$",
+        re.I,
+    )
+    for button in page.get_by_role("button", name=pattern).all():
+        if button.is_visible():
+            button.click()
+            return
+    raise BrowserAuthError(
+        "US Foods displayed a credential step without a Continue button."
+    )
+
+
+def usf_password_login(user_id_value, password, secondary_id=""):
     """Log in through US Foods B2C and capture a fresh Panamax token chain."""
-    if not username or not password:
+    if not user_id_value or not password:
         raise BrowserAuthError("USF_EMAIL and USF_PASSWORD must both be configured.")
 
     sync_playwright = _playwright()
@@ -229,31 +269,52 @@ def usf_password_login(username, password):
                 "input[name*='user'], input[id*='user']"
             ).first
             user_id.wait_for(state="visible", timeout=15_000)
-            user_id.fill(username)
+            user_id.fill(user_id_value)
             page.get_by_role(
                 "button", name=re.compile(r"^log in$", re.I)
             ).first.click()
 
-            stage = "wait-for-password"
-            password_box = page.locator("input[type='password']").first
-            try:
-                password_box.wait_for(state="visible", timeout=30_000)
-            except Exception:
-                if user_id.is_visible():
-                    raise BrowserAuthError(
-                        "US Foods did not advance past the configured user ID."
-                    ) from None
-                raise
-            stage = "submit-password"
-            password_box.fill(password)
-
-            submit = page.locator("button[type='submit']:visible").first
-            if submit.count() and submit.is_visible():
-                submit.click()
+            stage = "identify-next-credential-step"
+            deadline = time.monotonic() + 35
+            secondary_submitted = False
+            password_box = None
+            while time.monotonic() < deadline:
+                visible_text = page.locator("body").inner_text(timeout=5_000)
+                visible_passwords = page.locator(
+                    "#modal-input:visible, #passwordInput:visible, "
+                    "input[type='password']:visible"
+                )
+                step = _classify_usf_credential_step(
+                    visible_text,
+                    has_visible_password=visible_passwords.count() > 0,
+                )
+                if step == "secondary-id":
+                    stage = "submit-secondary-id"
+                    if secondary_submitted:
+                        raise BrowserAuthError(
+                            "US Foods rejected the configured secondary ID."
+                        )
+                    if not secondary_id:
+                        raise BrowserAuthError(
+                            "USF_SECONDARY_ID is required by this US Foods account."
+                        )
+                    secondary_box = _visible_usf_field(page, step)
+                    secondary_box.fill(secondary_id)
+                    _click_visible_usf_button(page, ("Continue", "Log in"))
+                    secondary_submitted = True
+                    page.wait_for_timeout(1_500)
+                    continue
+                if step == "password":
+                    stage = "submit-password"
+                    password_box = _visible_usf_field(page, step)
+                    password_box.fill(password)
+                    _click_visible_usf_button(page, ("Continue", "Log in"))
+                    break
+                page.wait_for_timeout(500)
             else:
-                page.get_by_role(
-                    "button", name=re.compile(r"^(log in|continue)$", re.I)
-                ).first.click()
+                raise BrowserAuthError(
+                    "US Foods did not display the next credential step."
+                )
 
             try:
                 stage = "complete-provider-login"
@@ -262,9 +323,9 @@ def usf_password_login(username, password):
                     timeout=45_000,
                 )
             except Exception:
-                if password_box.is_visible():
+                if password_box is not None and password_box.is_visible():
                     raise BrowserAuthError(
-                        "US Foods rejected the configured user ID/password."
+                        "US Foods rejected the configured credentials."
                     ) from None
                 raise BrowserAuthError(
                     "US Foods requires an additional interactive sign-in step."

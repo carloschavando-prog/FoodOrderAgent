@@ -6,6 +6,23 @@ import browser_auth
 
 
 class BrowserAuthParsingTests(unittest.TestCase):
+    def test_identifies_secondary_id_before_password(self):
+        self.assertEqual(
+            browser_auth._classify_usf_credential_step(
+                "Enter your secondary ID to continue",
+                has_visible_password=True,
+            ),
+            "secondary-id",
+        )
+
+    def test_identifies_visible_password_modal(self):
+        self.assertEqual(
+            browser_auth._classify_usf_credential_step(
+                "Enter your password below to continue"
+            ),
+            "password",
+        )
+
     def test_builds_usf_refresh_candidate_without_credentials(self):
         bearer, candidate = browser_auth._usf_candidate(
             {

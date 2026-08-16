@@ -52,6 +52,7 @@ Each scraper:
 | `USF_REFRESH_TOKEN` | Secret | US Foods refresh token (auto-rotated each run) |
 | `USF_CONFIG` | Secret | US Foods static config JSON |
 | `USF_EMAIL` | Secret | US Foods account identifier used only for interactive token recovery |
+| `USF_SECONDARY_ID` | Secret | Secondary ID requested after the US Foods User ID, when required by the account |
 | `USF_PASSWORD` | Secret | US Foods password used only for interactive token recovery |
 | `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
 | `PFG_CONFIG` | Secret | PFG static config JSON |

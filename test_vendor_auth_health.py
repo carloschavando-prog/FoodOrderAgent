@@ -10,7 +10,11 @@ import vendor_auth_health
 class USFoodsRecoveryTests(unittest.TestCase):
     @mock.patch.dict(
         os.environ,
-        {"USF_EMAIL": "account-name", "USF_PASSWORD": "password-value"},
+        {
+            "USF_EMAIL": "account-name",
+            "USF_SECONDARY_ID": "secondary-value",
+            "USF_PASSWORD": "password-value",
+        },
         clear=False,
     )
     @mock.patch("scrape_usfoods.save_config")
@@ -46,13 +50,19 @@ class USFoodsRecoveryTests(unittest.TestCase):
         self.assertEqual(bearer, "Bearer access-value")
         self.assertNotIn("refresh_provider", config)
         self.assertEqual(config["refresh_token"], "replacement-refresh")
-        browser_login.assert_called_once_with("account-name", "password-value")
+        browser_login.assert_called_once_with(
+            "account-name", "password-value", "secondary-value"
+        )
         get_list_items.assert_called_once_with("Bearer access-value", 123)
         save_config.assert_called_once_with(config, persist_static=True)
 
     @mock.patch.dict(
         os.environ,
-        {"USF_EMAIL": "account-name", "USF_PASSWORD": "password-value"},
+        {
+            "USF_EMAIL": "account-name",
+            "USF_SECONDARY_ID": "",
+            "USF_PASSWORD": "password-value",
+        },
         clear=False,
     )
     @mock.patch("scrape_usfoods.save_config")

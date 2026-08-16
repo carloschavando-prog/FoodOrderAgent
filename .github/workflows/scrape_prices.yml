@@ -82,6 +82,7 @@ jobs:
           USF_CONFIG: ${{ secrets.USF_CONFIG }}
           USF_REFRESH_TOKEN: ${{ secrets.USF_REFRESH_TOKEN }}
           USF_EMAIL: ${{ secrets.USF_EMAIL }}
+          USF_SECONDARY_ID: ${{ secrets.USF_SECONDARY_ID }}
           USF_PASSWORD: ${{ secrets.USF_PASSWORD }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -110,6 +111,7 @@ jobs:
           USF_REFRESH_TOKEN:  ${{ secrets.USF_REFRESH_TOKEN }}
           USF_CONFIG:         ${{ secrets.USF_CONFIG }}
           USF_EMAIL:          ${{ secrets.USF_EMAIL }}
+          USF_SECONDARY_ID:   ${{ secrets.USF_SECONDARY_ID }}
           USF_PASSWORD:       ${{ secrets.USF_PASSWORD }}
           GH_PAT:             ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY:  ${{ github.repository }}

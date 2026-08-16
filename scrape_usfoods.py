@@ -343,6 +343,7 @@ def authenticate(config):
         bearer = refresh_token(config)
     except USFAuthError as refresh_error:
         username = os.environ.get("USF_EMAIL", "").strip()
+        secondary_id = os.environ.get("USF_SECONDARY_ID", "")
         password = os.environ.get("USF_PASSWORD", "")
         if not username or not password:
             raise refresh_error
@@ -358,7 +359,7 @@ def authenticate(config):
     from browser_auth import BrowserAuthError, usf_password_login
 
     try:
-        bearer, recovered = usf_password_login(username, password)
+        bearer, recovered = usf_password_login(username, password, secondary_id)
     except BrowserAuthError as exc:
         raise USFAuthError(str(exc)) from None
     candidate.update(recovered)
