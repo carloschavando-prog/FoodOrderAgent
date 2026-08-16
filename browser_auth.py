@@ -309,10 +309,11 @@ def usf_password_login(user_id_value, password, secondary_id=""):
                 "input[name*='user'], input[id*='user']"
             ).first
             user_id.wait_for(state="visible", timeout=15_000)
-            user_id.fill(user_id_value)
-            page.get_by_role(
-                "button", name=re.compile(r"^log in$", re.I)
-            ).first.click()
+            user_id.click()
+            user_id.fill("")
+            user_id.type(user_id_value)
+            user_id.press("Tab")
+            page.locator("#next:visible").click()
 
             stage = "identify-next-credential-step"
             deadline = time.monotonic() + 35
