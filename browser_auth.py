@@ -12,6 +12,7 @@ import base64
 import json
 import re
 import time
+import urllib.parse
 
 
 SYSCO_LOGIN_URL = "https://shop.sysco.com/auth/login"
@@ -234,6 +235,35 @@ def _click_visible_usf_button(page, names):
     )
 
 
+def _safe_usf_field_state(page):
+    """Describe visible field roles without reading any entered values."""
+    roles = []
+    for field in page.locator("input:visible").all():
+        field_id = field.get_attribute("id") or ""
+        label = " ".join(
+            filter(
+                None,
+                [
+                    field.get_attribute("aria-label"),
+                    field.get_attribute("placeholder"),
+                    field.get_attribute("name"),
+                ],
+            )
+        ).lower()
+        field_type = (field.get_attribute("type") or "text").lower()
+        if "secondary" in label:
+            role = "secondary-id"
+        elif field_id in {"signInName", "signInName-facade"} or "user id" in label:
+            role = "user-id"
+        elif field_id in {"modal-input", "passwordInput"} or field_type == "password":
+            role = "password-style"
+        else:
+            role = field_type
+        if role not in roles:
+            roles.append(role)
+    return ",".join(roles) or "none"
+
+
 def usf_password_login(user_id_value, password, secondary_id=""):
     """Log in through US Foods B2C and capture a fresh Panamax token chain."""
     if not user_id_value or not password:
@@ -243,11 +273,21 @@ def usf_password_login(user_id_value, password, secondary_id=""):
     with sync_playwright() as playwright:
         browser, context = _launch_context(playwright)
         capture = {}
+        sign_in_responses = []
         stage = "open-user-id-page"
         try:
             page = context.new_page()
 
             def capture_token(response):
+                parsed_url = urllib.parse.urlsplit(response.url)
+                if (
+                    parsed_url.hostname
+                    and parsed_url.hostname.endswith("b2clogin.com")
+                    and response.request.method == "POST"
+                ):
+                    sign_in_responses.append(
+                        (parsed_url.path.rsplit("/", 1)[-1], response.status)
+                    )
                 if USF_TOKEN_PATH not in response.url or not response.ok:
                     return
                 try:
@@ -312,8 +352,15 @@ def usf_password_login(user_id_value, password, secondary_id=""):
                     break
                 page.wait_for_timeout(500)
             else:
+                response_hint = (
+                    f"{sign_in_responses[-1][0]}-http-{sign_in_responses[-1][1]}"
+                    if sign_in_responses
+                    else "none"
+                )
                 raise BrowserAuthError(
-                    "US Foods did not display the next credential step."
+                    "US Foods did not display the next credential step "
+                    f"(visible-fields={_safe_usf_field_state(page)}, "
+                    f"sign-in-response={response_hint})."
                 )
 
             try:

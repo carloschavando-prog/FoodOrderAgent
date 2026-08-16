@@ -1,6 +1,7 @@
 import base64
 import json
 import unittest
+from unittest import mock
 
 import browser_auth
 
@@ -22,6 +23,20 @@ class BrowserAuthParsingTests(unittest.TestCase):
             ),
             "password",
         )
+
+    def test_safe_field_state_never_reads_values(self):
+        field = mock.Mock()
+        field.get_attribute.side_effect = lambda name: {
+            "id": "signInName-facade",
+            "aria-label": "User ID",
+            "placeholder": "User ID",
+            "name": "User ID",
+            "type": "text",
+        }.get(name)
+        page = mock.Mock()
+        page.locator.return_value.all.return_value = [field]
+
+        self.assertEqual(browser_auth._safe_usf_field_state(page), "user-id")
 
     def test_builds_usf_refresh_candidate_without_credentials(self):
         bearer, candidate = browser_auth._usf_candidate(
