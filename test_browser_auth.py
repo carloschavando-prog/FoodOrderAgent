@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 import browser_auth
+import bootstrap_usf_auth
 
 
 class BrowserAuthParsingTests(unittest.TestCase):
@@ -37,6 +38,19 @@ class BrowserAuthParsingTests(unittest.TestCase):
         page.locator.return_value.all.return_value = [field]
 
         self.assertEqual(browser_auth._safe_usf_field_state(page), "user-id")
+
+    def test_bootstrap_static_config_excludes_refresh_token(self):
+        config = bootstrap_usf_auth._static_usf_config(
+            {
+                "refresh_token": "secret-value",
+                "auth_context": {"customer": "configured"},
+                "scopes": "ordering",
+            },
+            123,
+        )
+
+        self.assertNotIn("refresh_token", config)
+        self.assertEqual(config["fall_2025_list_id"], 123)
 
     def test_builds_usf_refresh_candidate_without_credentials(self):
         bearer, candidate = browser_auth._usf_candidate(

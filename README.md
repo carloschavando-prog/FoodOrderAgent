@@ -72,6 +72,12 @@ normal cookie or refresh-token path expires, the connector uses the repository
 email/password in a fresh browser context, validates read-only list access, and
 only then promotes newly issued US Foods refresh credentials.
 
+If US Foods requires a new-device secondary ID or one-time verification, run
+`python3 bootstrap_usf_auth.py` locally. Complete the provider prompts in the
+Chrome window. The script validates the ordering list and writes
+`USF_REFRESH_TOKEN` plus `USF_CONFIG` to GitHub through stdin; it does not save
+or print credentials, cookies, screenshots, or token values.
+
 ---
 
 ## Local Development
