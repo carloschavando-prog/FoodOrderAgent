@@ -15,8 +15,8 @@ Output:
 import asyncio, json, os, re
 from playwright.async_api import async_playwright
 
-EMAIL    = "cchavando@onparbar.com"
-PASSWORD = "!Onpar4464"
+EMAIL = os.getenv("PFG_EMAIL", "")
+PASSWORD = os.getenv("PFG_PASSWORD", "")
 
 SESSION_FILE = os.path.expanduser("~/.FoodOrderAgent/pfg_session.json")
 CONFIG_FILE  = os.path.expanduser("~/.FoodOrderAgent/pfg_api_config.json")

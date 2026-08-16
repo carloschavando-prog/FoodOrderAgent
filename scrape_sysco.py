@@ -15,14 +15,14 @@ GraphQL (gateway-api.shop.sysco.com/graphql):
   - Prices          → priceInfoV2.case.netPrice for each product
 
 CI secrets required:
-  SYSCO_EMAIL      carlos@onparbar.com
-  SYSCO_PASSWORD   !Compass1066
+  SYSCO_EMAIL      account email from the environment
+  SYSCO_PASSWORD   account password from the environment
   SUPABASE_URL     https://gnkwdoohzspomvdshzge.supabase.co
   SUPABASE_KEY     sb_publishable_…
 
 Supabase: vendor_id=3 (SYSCO), season from PRICE_SEASON env var.
 
-If re-auth fails (Okta MFA or policy change), debug HTML is saved to /tmp/sysco_*.html.
+Authentication failures are reported without writing identity pages or tokens.
 """
 
 import base64, json, os, re, sys, time, urllib.request, urllib.error, urllib.parse
@@ -46,7 +46,7 @@ SB_KEY    = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7ns
 SEASON    = os.getenv("PRICE_SEASON", "Spring 2026")
 VENDOR_ID = 3   # SYSCO
 
-EMAIL    = os.getenv("SYSCO_EMAIL",    "carlos@onparbar.com")
+EMAIL = os.getenv("SYSCO_EMAIL", "")
 PASSWORD = os.getenv("SYSCO_PASSWORD", "")
 
 _UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -146,7 +146,7 @@ def _validate_with_cookies(cookie_str):
     return f"Bearer {creds}", shop_account_id, csrf_token, vid
 
 
-def get_bearer_token(email, password):
+def _get_bearer_token_http(email, password, *, allow_cookies=True):
     """
     Authenticate via Okta SAML2 step-up flow and return
     (bearer_header, shop_account_id, csrf_token, vid).
@@ -156,7 +156,7 @@ def get_bearer_token(email, password):
     """
     # ── Fast path: session cookies already captured ───────────────────────────
     sysco_cookies_raw = os.getenv("SYSCO_COOKIES", "")
-    if sysco_cookies_raw:
+    if allow_cookies and sysco_cookies_raw:
         print("  Cookies loaded from SYSCO_COOKIES env var — skipping Okta ...")
         try:
             # Accept either JSON dict {"MSS_STATEFUL": "...", ...} or raw cookie string
@@ -195,8 +195,8 @@ def get_bearer_token(email, password):
 
     redirect_to = (sso_resp.get("data") or {}).get("redirectTo", "")
     if not redirect_to:
-        raise RuntimeError(f"No redirectTo in auth/sso response: {sso_resp}")
-    print(f"  [1] redirectTo: {redirect_to[:80]}...")
+        raise RuntimeError("Sysco did not return an identity-provider redirect.")
+    print("  [1] Received the Sysco identity-provider redirect")
 
     # ── Step 2: GET Okta SAML page, extract stateToken ───────────────────────
     print("  [2] GET Okta SAML page ...")
@@ -213,13 +213,10 @@ def get_bearer_token(email, password):
 
     state_token = _extract_state_token(page_html)
     if not state_token:
-        with open("/tmp/sysco_okta_debug.html", "w") as f:
-            f.write(page_html[:8000])
         raise RuntimeError(
-            "Could not extract stateToken from Okta page. "
-            "Debug HTML saved to /tmp/sysco_okta_debug.html"
+            "Could not start the Sysco authentication transaction."
         )
-    print(f"  [2] stateToken: {state_token[:30]}...")
+    print("  [2] Received the Sysco authentication transaction")
 
     # ── Step 3: Authenticate the custom-page stateToken ──────────────────────
     # Sysco's page currently returns stateToken values beginning with "02.id.".
@@ -247,14 +244,15 @@ def get_bearer_token(email, password):
         with opener.open(authn_req, timeout=20) as r:
             authn_resp = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        body = e.read().decode()[:400]
-        raise RuntimeError(f"Okta /api/v1/authn → {e.code}: {body}")
+        raise RuntimeError(
+            f"Sysco credential authentication was rejected (HTTP {e.code})."
+        ) from None
 
     status = authn_resp.get("status", "")
     if status != "SUCCESS":
         raise RuntimeError(
             f"Okta authn failed: status={status}. "
-            f"Response: {json.dumps(authn_resp)[:300]}"
+            "MFA, password rotation, or an account-policy change may be required."
         )
     print(f"  [3] authn status: {status}")
 
@@ -280,13 +278,11 @@ def get_bearer_token(email, password):
     form_action   = parser.action or f"{AUTH_BASE}/api/v1/auth/sso/assert"
 
     if not saml_response:
-        with open("/tmp/sysco_stepup_debug.html", "w") as f:
-            f.write(step_html[:8000])
         raise RuntimeError(
-            "No SAMLResponse in step-up HTML. "
-            "Debug HTML saved to /tmp/sysco_stepup_debug.html"
+            "Sysco did not return a SAML assertion. MFA or an interactive "
+            "login may be required."
         )
-    print(f"  [4] SAMLResponse len={len(saml_response)}  RelayState: {relay_state[:40]}...")
+    print("  [4] Received the Sysco SAML assertion")
 
     # ── Step 5: POST SAML assertion → sets MSS_STATEFUL cookie ───────────────
     print("  [5] POST sso/assert ...")
@@ -311,8 +307,9 @@ def get_bearer_token(email, password):
     except urllib.error.HTTPError as e:
         # A 302 is normal — urllib follows it, but 4xx/5xx means SAML rejected
         if e.code not in (302,):
-            body = e.read().decode()[:300]
-            raise RuntimeError(f"sso/assert → {e.code}: {body}")
+            raise RuntimeError(
+                f"Sysco SAML assertion was rejected (HTTP {e.code})."
+            ) from None
 
     # ── Step 6: GET auth/validate → gatewayCredentials JWT ───────────────────
     print("  [6] GET auth/validate ...")
@@ -337,7 +334,7 @@ def get_bearer_token(email, password):
 
     creds = validate_resp.get("gatewayCredentials", "")
     if not creds:
-        raise RuntimeError(f"No gatewayCredentials in validate response: {validate_resp}")
+        raise RuntimeError("Sysco authentication returned no gateway credentials.")
 
     shop_account_id = validate_resp.get("shopAccountId", SHOP_ACCOUNT_ID)
 
@@ -352,8 +349,27 @@ def get_bearer_token(email, password):
         csrf_token = ""
         vid = ""
 
-    print(f"  [6] ✅ Authenticated as {validate_resp.get('nameId')}  (role={role})")
+    print(f"  [6] ✅ Sysco authentication succeeded (role={role})")
     return f"Bearer {creds}", shop_account_id, csrf_token, vid
+
+
+def get_bearer_token(email, password, *, allow_cookies=True):
+    """Authenticate through cookies/HTTP, then the current browser UI."""
+    try:
+        return _get_bearer_token_http(
+            email,
+            password,
+            allow_cookies=allow_cookies,
+        )
+    except (OSError, RuntimeError, urllib.error.HTTPError) as http_error:
+        if not email or not password:
+            raise http_error
+        print("  ⚠️  Direct Sysco authentication failed; trying browser login")
+        from browser_auth import sysco_password_login
+
+        result = sysco_password_login(email, password)
+        print("  ✅ Sysco browser authentication succeeded")
+        return result
 
 
 # ── GraphQL helper ────────────────────────────────────────────────────────────
@@ -835,15 +851,19 @@ def main():
     print("── Sysco Price Scraper ────────────────────────────────")
 
     password = os.getenv("SYSCO_PASSWORD", "")
+    email = os.getenv("SYSCO_EMAIL", "").strip()
     # SYSCO_COOKIES (session cookie fast path) doesn't need the password
     if not password and not os.getenv("SYSCO_COOKIES"):
         print("❌ SYSCO_PASSWORD env var not set (and no SYSCO_COOKIES fallback).")
         print("   Set SYSCO_PASSWORD in CI secrets, or run intercept_sysco5.py and set SYSCO_COOKIES.")
         sys.exit(1)
+    if password and not email:
+        print("❌ SYSCO_EMAIL env var not set.")
+        sys.exit(1)
 
     # 1. Authenticate
     print("\n→ Authenticating via Okta SAML2 ...")
-    bearer, shop_account_id, csrf_token, vid = get_bearer_token(EMAIL, password)
+    bearer, shop_account_id, csrf_token, vid = get_bearer_token(email, password)
     print(f"  shopAccountId: {shop_account_id}")
 
     ctx = {

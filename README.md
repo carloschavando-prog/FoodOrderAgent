@@ -35,9 +35,9 @@ Each scraper:
 
 | # | Vendor | Status | vendor_id | Auth method |
 |---|--------|--------|-----------|-------------|
-| 1 | US Foods | ✅ Live | 1 | Azure B2C OAuth2 (JSON body) |
+| 1 | US Foods | ✅ Live | 1 | Panamax refresh chain + browser B2C recovery |
 | 2 | PFG CustomerFirst | ✅ Live | 2 | MSAL B2C (form-encoded, `client_info=1`) |
-| 3 | Sysco | ✅ Live | 3 | Okta SAML2 step-up + GraphQL (programmatic) |
+| 3 | Sysco | ✅ Live | 3 | Session/Okta fast path + browser login recovery |
 | 4 | GFS Gordon Food Service | ✅ Live | 4 | Okta SAML2 session cookies (`GFS_COOKIES` secret) |
 
 ---
@@ -51,13 +51,32 @@ Each scraper:
 | `GH_PAT` | Secret | GitHub PAT with repo secrets write permission |
 | `USF_REFRESH_TOKEN` | Secret | US Foods refresh token (auto-rotated each run) |
 | `USF_CONFIG` | Secret | US Foods static config JSON |
+| `USF_EMAIL` | Secret | US Foods account identifier used only for interactive token recovery |
+| `USF_SECONDARY_ID` | Secret | Secondary ID requested after the US Foods User ID, when required by the account |
+| `USF_PASSWORD` | Secret | US Foods password used only for interactive token recovery |
 | `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
 | `PFG_CONFIG` | Secret | PFG static config JSON |
 | `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs2.py`) |
-| `SYSCO_EMAIL` | Secret | Sysco login email (`carlos@onparbar.com`) |
+| `SYSCO_EMAIL` | Secret | Sysco login email |
 | `SYSCO_PASSWORD` | Secret | Sysco login password |
 | `SYSCO_COOKIES` | Secret | Sysco session cookies JSON — fast path that bypasses Okta (refresh by running `intercept_sysco5.py`) |
 | `PRICE_SEASON` | Variable | Season label for price_lists table (e.g. `Spring 2026`) |
+
+Run **Actions → Scrape Vendor Prices → Run workflow**, select
+`auth-health`, and choose `sysco`, `usf`, or `both` for a read-only login and
+order-guide check. Authentication health checks never write prices, add cart
+items, or submit orders.
+
+The workflows install a pinned headless Chromium runtime. If a provider's
+normal cookie or refresh-token path expires, the connector uses the repository
+email/password in a fresh browser context, validates read-only list access, and
+only then promotes newly issued US Foods refresh credentials.
+
+If US Foods requires a new-device secondary ID or one-time verification, run
+`python3 bootstrap_usf_auth.py` locally. Complete the provider prompts in the
+Chrome window. The script validates the ordering list and writes
+`USF_REFRESH_TOKEN` plus `USF_CONFIG` to GitHub through stdin; it does not save
+or print credentials, cookies, screenshots, or token values.
 
 ---
 
@@ -113,7 +132,9 @@ gh variable set PRICE_SEASON --body "Fall 2026" -R carloschavando-prog/FoodOrder
 
 - **Auth** (2 paths — fast path preferred):
   - **Fast path** (`SYSCO_COOKIES` set): loads `MSS_STATEFUL` + `TAPID` + `vid` + `JSESSIONID` from secret, calls `auth/validate` directly — no Okta needed. Refresh by running `intercept_sysco5.py`.
-  - **Okta IDX fallback** (`SYSCO_COOKIES` absent): full 6-step Okta flow. ⚠️ Sysco migrated to Okta Identity Engine (June 2026) — stateToken now starts with `02.id.` (IDX interactionHandle); scraper uses `/idp/idx/introspect` → `/idp/idx/identify` → `/idp/idx/challenge/answer` instead of old `/api/v1/authn`.
+  - **Password fallback** (`SYSCO_COOKIES` absent/expired): tries the legacy
+    direct SAML exchange, then uses the current Sysco/Okta browser flow in a
+    fresh headless Chromium context.
   - Step 5-6 (both paths): `POST auth.shop.sysco.com/api/v1/auth/sso/assert` → sets `MSS_STATEFUL` cookie → `GET auth/validate` → `{gatewayCredentials: JWT}`
 - **GraphQL**: `POST gateway-api.shop.sysco.com/graphql`
   - Required headers: `Authorization: Bearer <gatewayCredentials>` + `syy-authorization` (base64 account context) + `syy-requested-by` (csrf_token from JWT)
@@ -172,6 +193,9 @@ POST v1/orders/cancel               {orderId:"1050723762", groupNumber:"01"}   (
 
 - **Base**: `https://panamax-api.ama.usfoods.com`
 - **Token refresh**: `POST auth-api/v1/oauth/token` — JSON body `grantType: "refreshToken"`
+- **Credential recovery**: current two-step Azure B2C browser login; the
+  captured Panamax token is validated against the configured list before the
+  GitHub refresh/config secrets are rotated.
 - **Required headers**: `consumer-id: ecom`, `correlation-id: ecomr4-{uuid}`, `transaction-id: {ms}`, `Origin: https://order.usfoods.com`, `usflang: en`
 
 ## PFG CustomerFirst API Notes

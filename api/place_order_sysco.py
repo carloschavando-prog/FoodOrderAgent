@@ -37,7 +37,7 @@ SHOP_ACCOUNT_ID  = "usbl-019-700932"
 ORDER_NAME       = "Food Order"
 GROUND_SHIPPING_CONDITION = "GROUND"
 
-EMAIL    = os.getenv("SYSCO_EMAIL", "carlos@onparbar.com")
+EMAIL = os.getenv("SYSCO_EMAIL", "")
 PASSWORD = os.getenv("SYSCO_PASSWORD", "")
 
 _UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "

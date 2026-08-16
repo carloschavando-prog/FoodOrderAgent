@@ -19,8 +19,8 @@ API_DIR      = os.path.expanduser("~/.FoodOrderAgent/api_captures")
 os.makedirs(API_DIR, exist_ok=True)
 
 PORTAL_URL = "https://shop.sysco.com/app/account-manager"
-EMAIL      = "carlos@onparbar.com"
-PASSWORD   = "!Compass1066"
+EMAIL = os.getenv("SYSCO_EMAIL", "")
+PASSWORD = os.getenv("SYSCO_PASSWORD", "")
 
 all_requests  = []
 api_responses = {}

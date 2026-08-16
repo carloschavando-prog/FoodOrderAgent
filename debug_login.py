@@ -1,9 +1,10 @@
 """Debug the US Foods login modal — inspect iframes and network."""
 import asyncio
+import os
 from playwright.async_api import async_playwright
 
-USER = "onparbarngrill"
-PASS = "Onpar4464"
+USER = os.getenv("USF_EMAIL", "")
+PASS = os.getenv("USF_PASSWORD", "")
 
 async def main():
     async with async_playwright() as p:

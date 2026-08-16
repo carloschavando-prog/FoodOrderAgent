@@ -5,15 +5,40 @@ on:
     # Daily 5:00 AM Eastern during daylight time (09:00 UTC).
     # GitHub cron runs in UTC; adjust to 10:00 UTC after the DST change if needed.
     - cron: '0 9 * * *'
-  workflow_dispatch:   # allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: What should this run do?
+        required: true
+        type: choice
+        default: auth-health
+        options:
+          - auth-health
+          - prices
+      vendor:
+        description: Vendor for an authentication health check
+        required: true
+        type: choice
+        default: both
+        options:
+          - both
+          - sysco
+          - usf
+
+permissions:
+  contents: read
 
 concurrency:
   group: vendor-price-scrape
   cancel-in-progress: false
 
 jobs:
-  usfoods:
-    name: US Foods
+  auth-health-sysco:
+    name: Verify Sysco password login
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'auth-health' &&
+      (inputs.vendor == 'both' || inputs.vendor == 'sysco')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,12 +47,72 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
+
+      - name: Run read-only Sysco authentication check
+        env:
+          SYSCO_EMAIL: ${{ secrets.SYSCO_EMAIL }}
+          SYSCO_PASSWORD: ${{ secrets.SYSCO_PASSWORD }}
+        run: python3 vendor_auth_health.py sysco
+
+  auth-health-usf:
+    name: Verify US Foods connector
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'auth-health' &&
+      (inputs.vendor == 'both' || inputs.vendor == 'usf')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
+
+      - name: Run read-only US Foods authentication check
+        env:
+          USF_CONFIG: ${{ secrets.USF_CONFIG }}
+          USF_REFRESH_TOKEN: ${{ secrets.USF_REFRESH_TOKEN }}
+          USF_EMAIL: ${{ secrets.USF_EMAIL }}
+          USF_SECONDARY_ID: ${{ secrets.USF_SECONDARY_ID }}
+          USF_PASSWORD: ${{ secrets.USF_PASSWORD }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 vendor_auth_health.py usf
+
+  usfoods:
+    name: US Foods
+    if: github.event_name == 'schedule' || inputs.operation == 'prices'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
+
       - name: Scrape US Foods prices
         env:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
           USF_REFRESH_TOKEN:  ${{ secrets.USF_REFRESH_TOKEN }}
           USF_CONFIG:         ${{ secrets.USF_CONFIG }}
+          USF_EMAIL:          ${{ secrets.USF_EMAIL }}
+          USF_SECONDARY_ID:   ${{ secrets.USF_SECONDARY_ID }}
+          USF_PASSWORD:       ${{ secrets.USF_PASSWORD }}
           GH_PAT:             ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY:  ${{ github.repository }}
           PRICE_SEASON:       ${{ vars.PRICE_SEASON }}
@@ -35,6 +120,7 @@ jobs:
 
   pfg:
     name: PFG CustomerFirst
+    if: github.event_name == 'schedule' || inputs.operation == 'prices'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +142,7 @@ jobs:
 
   gfs:
     name: GFS Gordon Food Service
+    if: github.event_name == 'schedule' || inputs.operation == 'prices'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +161,7 @@ jobs:
 
   sysco:
     name: Sysco
+    if: github.event_name == 'schedule' || inputs.operation == 'prices'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,6 +169,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install browser authentication support
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m playwright install --with-deps chromium
 
       - name: Scrape Sysco prices
         env:
@@ -95,7 +188,9 @@ jobs:
   report:
     name: Basket Report
     needs: [usfoods, pfg, gfs, sysco]
-    if: always()
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' || inputs.operation == 'prices')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
