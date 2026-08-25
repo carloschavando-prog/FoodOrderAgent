@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import os
 
+import scrape_gfs
+import scrape_pfg
 import scrape_sysco
 import scrape_usfoods
 
@@ -61,7 +63,41 @@ def check_usf():
     )
 
 
-CHECKS = {"sysco": check_sysco, "usf": check_usf}
+def check_pfg():
+    config = scrape_pfg.load_config()
+    bearer = scrape_pfg.refresh_token(config, persist=False)
+    customer_id = config.get("customer_id", "ccbddeae-bc43-4287-a4e0-8d5bee2b913c")
+    list_id = config.get("fall_list_id", "13e8ce85-8f4e-4cfe-a6dd-cac49a88dc60")
+    products = scrape_pfg.get_products(bearer, customer_id, list_id)
+    if not products:
+        raise HealthCheckError(
+            "PFG authenticated but the configured product list was empty."
+        )
+    scrape_pfg.save_config(config)
+    print(f"✅ PFG authentication and product-list access verified ({len(products)} items)")
+
+
+def check_gfs():
+    cookies = scrape_gfs.load_cookies()
+    guide = scrape_gfs.gfs_get("v6/lists/order-guide", cookies)
+    materials = {
+        material
+        for category in guide.get("guideCategories", [])
+        for material in category.get("materialNumbers", [])
+    }
+    if not materials:
+        raise HealthCheckError(
+            "GFS authenticated but the configured order guide was empty."
+        )
+    print(f"✅ GFS authentication and order-guide access verified ({len(materials)} items)")
+
+
+CHECKS = {
+    "gfs": check_gfs,
+    "pfg": check_pfg,
+    "sysco": check_sysco,
+    "usf": check_usf,
+}
 
 
 def main(argv=None):

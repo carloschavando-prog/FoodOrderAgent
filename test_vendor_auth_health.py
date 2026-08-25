@@ -120,6 +120,49 @@ class VendorHealthCheckTests(unittest.TestCase):
         )
         fetch_order_guide.assert_called_once()
 
+    @mock.patch("vendor_auth_health.scrape_pfg.save_config")
+    @mock.patch("vendor_auth_health.scrape_pfg.get_products", return_value=[{}])
+    @mock.patch(
+        "vendor_auth_health.scrape_pfg.refresh_token",
+        return_value="Bearer access",
+    )
+    @mock.patch(
+        "vendor_auth_health.scrape_pfg.load_config",
+        return_value={
+            "customer_id": "customer",
+            "fall_list_id": "list",
+            "refresh_token": "refresh",
+        },
+    )
+    def test_pfg_promotes_refresh_only_after_catalog_validation(
+        self,
+        load_config,
+        refresh_token,
+        get_products,
+        save_config,
+    ):
+        vendor_auth_health.check_pfg()
+
+        refresh_token.assert_called_once_with(load_config.return_value, persist=False)
+        get_products.assert_called_once_with("Bearer access", "customer", "list")
+        save_config.assert_called_once_with(load_config.return_value)
+
+    @mock.patch("vendor_auth_health.scrape_gfs.gfs_get")
+    @mock.patch(
+        "vendor_auth_health.scrape_gfs.load_cookies",
+        return_value={"session": "configured"},
+    )
+    def test_gfs_health_reads_only_the_order_guide(self, load_cookies, gfs_get):
+        gfs_get.return_value = {
+            "guideCategories": [{"materialNumbers": ["101", "102"]}]
+        }
+
+        vendor_auth_health.check_gfs()
+
+        gfs_get.assert_called_once_with(
+            "v6/lists/order-guide", load_cookies.return_value
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

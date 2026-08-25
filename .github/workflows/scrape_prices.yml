@@ -19,11 +19,13 @@ on:
         description: Vendor for an authentication health check
         required: true
         type: choice
-        default: both
+        default: all
         options:
-          - both
+          - all
           - sysco
           - usf
+          - pfg
+          - gfs
 
 permissions:
   contents: read
@@ -38,7 +40,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.operation == 'auth-health' &&
-      (inputs.vendor == 'both' || inputs.vendor == 'sysco')
+      (inputs.vendor == 'all' || inputs.vendor == 'sysco')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +65,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' &&
       inputs.operation == 'auth-health' &&
-      (inputs.vendor == 'both' || inputs.vendor == 'usf')
+      (inputs.vendor == 'all' || inputs.vendor == 'usf')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,6 +89,47 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 vendor_auth_health.py usf
+
+  auth-health-pfg:
+    name: Verify PFG connector
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'auth-health' &&
+      (inputs.vendor == 'all' || inputs.vendor == 'pfg')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run read-only PFG authentication check
+        env:
+          PFG_CONFIG:         ${{ secrets.PFG_CONFIG }}
+          PFG_REFRESH_TOKEN:  ${{ secrets.PFG_REFRESH_TOKEN }}
+          GH_PAT:             ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY:  ${{ github.repository }}
+        run: python3 vendor_auth_health.py pfg
+
+  auth-health-gfs:
+    name: Verify GFS connector
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.operation == 'auth-health' &&
+      (inputs.vendor == 'all' || inputs.vendor == 'gfs')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run read-only GFS authentication check
+        env:
+          GFS_COOKIES: ${{ secrets.GFS_COOKIES }}
+        run: python3 vendor_auth_health.py gfs
 
   usfoods:
     name: US Foods

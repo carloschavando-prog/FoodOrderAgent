@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 
 from browser_auth import (
@@ -24,21 +23,11 @@ from browser_auth import (
     _usf_candidate,
 )
 from scrape_usfoods import get_list_items
+from github_secrets import set_repository_secret
 
 
 DEFAULT_REPOSITORY = "carloschavando-prog/FoodOrderAgent"
 DEFAULT_LIST_ID = 1000643297
-
-
-def _set_github_secret(name, value, repository):
-    result = subprocess.run(
-        ["gh", "secret", "set", name, "--repo", repository],
-        input=value,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        raise BrowserAuthError(f"Failed to update the {name} GitHub secret.")
 
 
 def _static_usf_config(candidate, list_id):
@@ -115,8 +104,10 @@ def main():
         )
 
     static_config = _static_usf_config(candidate, list_id)
-    _set_github_secret("USF_REFRESH_TOKEN", candidate["refresh_token"], repository)
-    _set_github_secret("USF_CONFIG", json.dumps(static_config), repository)
+    set_repository_secret(
+        "USF_REFRESH_TOKEN", candidate["refresh_token"], repository
+    )
+    set_repository_secret("USF_CONFIG", json.dumps(static_config), repository)
     print(
         "US Foods authentication is bootstrapped and ordering-list access was "
         f"verified ({len(product_numbers)} items)."

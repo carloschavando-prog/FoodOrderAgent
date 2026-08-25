@@ -13,12 +13,14 @@ Config sources (in priority order):
   - GitHub Actions: PFG_REFRESH_TOKEN + PFG_CONFIG env vars (repo secrets)
     After each run, PFG_REFRESH_TOKEN is updated via `gh secret set` so the
     token chain never breaks.
-  - Local: ~/.FoodOrderAgent/pfg_api_config.json  (created by intercept_pfg7.py)
+  - Local: ~/.FoodOrderAgent/pfg_api_config.json  (legacy development path)
 
 Supabase credentials:
   - SUPABASE_URL / SUPABASE_KEY env vars (or defaults below)
 """
-import json, os, sys, re, subprocess, urllib.request, urllib.error, urllib.parse, datetime
+import json, os, sys, re, urllib.request, urllib.error, urllib.parse, datetime
+
+from github_secrets import set_repository_secret
 
 # ── Config ─────────────────────────────────────────────────
 SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -152,7 +154,7 @@ def load_config():
         return config
     if not os.path.exists(CONFIG_FILE):
         print(f"❌ No config at {CONFIG_FILE}")
-        print("   Run  python3 intercept_pfg7.py  first to capture tokens.")
+        print("   Run python3 bootstrap_vendor_auth.py pfg to reconnect securely.")
         sys.exit(1)
     with open(CONFIG_FILE) as f:
         return json.load(f)
@@ -160,17 +162,13 @@ def load_config():
 def save_config(config):
     """Persist updated refresh token — GitHub secret in CI, local file otherwise."""
     if os.getenv("GITHUB_ACTIONS") == "true":
-        repo   = os.environ.get("GITHUB_REPOSITORY", "")
-        result = subprocess.run(
-            ["gh", "secret", "set", "PFG_REFRESH_TOKEN",
-             "-b", config["refresh_token"], "-R", repo],
-            capture_output=True, text=True,
-            env={**os.environ, "GH_TOKEN": os.environ.get("GH_PAT", "")},
+        set_repository_secret(
+            "PFG_REFRESH_TOKEN",
+            config["refresh_token"],
+            os.environ.get("GITHUB_REPOSITORY", ""),
+            token=os.environ.get("GH_PAT", ""),
         )
-        if result.returncode == 0:
-            print("  ✅ PFG_REFRESH_TOKEN secret rotated")
-        else:
-            print(f"  ⚠️  Secret rotation failed: {result.stderr[:200]}")
+        print("  ✅ PFG_REFRESH_TOKEN secret rotated")
     else:
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
@@ -199,7 +197,7 @@ def pfg_request(method, endpoint, bearer, payload=None, params=None):
         print(f"  ❌ PFG API {method} {endpoint} ({e.code}): {body[:300]}")
         raise
 
-def refresh_token(config):
+def refresh_token(config, *, persist=True):
     """Exchange MSAL B2C refresh token for new access + refresh token."""
     print("→ Refreshing PFG Bearer token (MSAL B2C)...")
     payload = urllib.parse.urlencode({
@@ -227,7 +225,8 @@ def refresh_token(config):
     bearer = f"Bearer {access}"
     config["access_token"]  = access
     config["refresh_token"] = resp["refresh_token"]   # chain refreshes
-    save_config(config)
+    if persist:
+        save_config(config)
     expires = resp.get("expires_in") or resp.get("id_token_expires_in", "?")
     print(f"  ✅ Bearer token refreshed (expires in {expires}s)")
     return bearer

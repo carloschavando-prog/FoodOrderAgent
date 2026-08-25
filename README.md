@@ -56,16 +56,17 @@ Each scraper:
 | `USF_PASSWORD` | Secret | US Foods password used only for interactive token recovery |
 | `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
 | `PFG_CONFIG` | Secret | PFG static config JSON |
-| `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (refresh by running `intercept_gfs2.py`) |
+| `GFS_COOKIES` | Secret | GFS Okta session cookies JSON (promoted only after read-only validation) |
 | `SYSCO_EMAIL` | Secret | Sysco login email |
 | `SYSCO_PASSWORD` | Secret | Sysco login password |
 | `SYSCO_COOKIES` | Secret | Sysco session cookies JSON — fast path that bypasses Okta (refresh by running `intercept_sysco5.py`) |
 | `PRICE_SEASON` | Variable | Season label for price_lists table (e.g. `Spring 2026`) |
 
 Run **Actions → Scrape Vendor Prices → Run workflow**, select
-`auth-health`, and choose `sysco`, `usf`, or `both` for a read-only login and
+`auth-health`, and choose one vendor or `all` for a read-only login and
 order-guide check. Authentication health checks never write prices, add cart
-items, or submit orders.
+items, or submit orders. Renewable tokens are promoted only after the matching
+catalog can be read.
 
 The workflows install a pinned headless Chromium runtime. If a provider's
 normal cookie or refresh-token path expires, the connector uses the repository
@@ -77,6 +78,19 @@ If US Foods requires a new-device secondary ID or one-time verification, run
 Chrome window. The script validates the ordering list and writes
 `USF_REFRESH_TOKEN` plus `USF_CONFIG` to GitHub through stdin; it does not save
 or print credentials, cookies, screenshots, or token values.
+
+If PFG or GFS requires interactive reauthentication, run one command locally:
+
+```bash
+python3 bootstrap_vendor_auth.py pfg
+python3 bootstrap_vendor_auth.py gfs
+```
+
+Each command opens a temporary browser, waits for you to complete the provider
+prompts, validates only the configured product list or order guide, and sends
+the new rotating session to GitHub Secrets through stdin. It does not reuse a
+Chrome profile, write a local session file, take screenshots, inspect a cart,
+or place an order.
 
 ---
 
@@ -98,17 +112,10 @@ SYSCO_PASSWORD='...' python3 scrape_sysco.py
 python3 basket_report.py
 ```
 
-### Refresh GFS cookies (when `GFS_COOKIES` secret expires, ~30 days):
+### Refresh PFG or GFS authentication:
 ```bash
-python3 intercept_gfs2.py   # opens Chrome, logs in via Okta SAML — fully automated
-python3 - <<'EOF'
-import json, os
-s = json.load(open(os.path.expanduser('~/.FoodOrderAgent/gfs_session.json')))
-cks = {c['name']: c['value'] for c in s['cookies']}
-print(json.dumps({'gor': cks.get('GOR','us-central1'), 'gclb': cks.get('GCLB',''),
-    'xsrf': cks.get('XSRF-TOKEN',''), 'session': cks.get('__Secure-GORDONORDERING2','')}))
-EOF
-| gh secret set GFS_COOKIES -R carloschavando-prog/FoodOrderAgent
+python3 bootstrap_vendor_auth.py pfg
+python3 bootstrap_vendor_auth.py gfs
 ```
 
 ### Update season (when a new menu season starts):
@@ -163,7 +170,7 @@ EOF
 - **Material info**: `POST /v1/materials/info` → plain JSON array body; response `{materialInfos: [{materialNumber, brand.en, description.en}]}`
 - **Prices**: `POST /v5/prices` → `{"materialNumbers": [...]}` ; response `{materialPrices: [{materialNumber, unitPrices: [{salesUom, price}]}]}`
 - **⚠️ Required on all mutating calls**: `X-Requested-With: XMLHttpRequest` — without it GFS returns HTTP 218 (silent error) instead of 200
-- **Session refresh**: cookies expire ~30 days — run `intercept_gfs2.py` locally then `gh secret set GFS_COOKIES`
+- **Session refresh**: cookies expire periodically — run `python3 bootstrap_vendor_auth.py gfs`; the script validates the order guide before promoting the new session through stdin
 - **Items**: 143 materials, ~138 with prices (June 2026)
 
 ### GFS Order Placement (confirmed working 2026-05-27):
