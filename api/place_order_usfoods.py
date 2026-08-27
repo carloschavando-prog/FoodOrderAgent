@@ -22,6 +22,8 @@ Credentials table (Supabase):
 import json, os, uuid, time, urllib.request, urllib.error, urllib.parse
 from http.server import BaseHTTPRequestHandler
 
+from api.vendor_auth import VendorAuthClient
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 SB_URL   = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -134,7 +136,7 @@ def _http_error_message(stage, error):
     return f"US Foods {stage} failed (HTTP {error.code}): {detail}"
 
 
-def refresh_bearer(config):
+def refresh_bearer(config, *, persist=True):
     """Exchange refresh token for new Bearer + refresh token. Updates config."""
     hdrs = {
         "Accept":         "application/json, text/plain, */*",
@@ -167,8 +169,25 @@ def refresh_bearer(config):
         raise RuntimeError("US Foods authentication returned no access token")
     bearer = f"{resp.get('tokenType', 'Bearer')} {access_token}"
     if resp.get("refreshToken"):
-        save_usf_refresh_token(resp["refreshToken"], config)
+        config["refresh_token"] = resp["refreshToken"]
+        if persist:
+            save_usf_refresh_token(resp["refreshToken"], config)
     return bearer
+
+
+def authenticate_usfoods():
+    """Refresh from the shared credential chain and durably save the rotation."""
+    lease = VendorAuthClient.from_env(direct=True).claim(1)
+    config = lease.credentials
+    try:
+        bearer = refresh_bearer(config, persist=False)
+        # Saving the new one-time token is part of authentication, not a
+        # best-effort side effect.  Never place an order if this commit fails.
+        lease.commit(config, verified=True)
+        return bearer, config
+    except Exception as ex:
+        lease.fail(ex)
+        raise
 
 
 # ── USF API helper ────────────────────────────────────────────────────────────
@@ -327,8 +346,7 @@ class handler(BaseHTTPRequestHandler):
             if not items:
                 raise ValueError("No items in request body")
 
-            config = load_usf_credentials()
-            bearer, config = refresh_bearer_with_fallback(config)
+            bearer, config = authenticate_usfoods()
             result = place_order(bearer, config, items)
 
             payload = json.dumps({

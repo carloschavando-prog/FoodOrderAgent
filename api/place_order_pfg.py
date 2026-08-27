@@ -32,6 +32,8 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
+from api.vendor_auth import VendorAuthClient
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 SB_URL  = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -109,7 +111,7 @@ def save_pfg_refresh_token(new_token, config):
 
 # ── Token refresh ─────────────────────────────────────────────────────────────
 
-def refresh_bearer(config):
+def refresh_bearer(config, *, persist=True):
     """Exchange MSAL B2C refresh token for new Bearer + refresh token."""
     payload = urllib.parse.urlencode({
         "grant_type":    "refresh_token",
@@ -137,8 +139,23 @@ def refresh_bearer(config):
     if not access:
         raise RuntimeError("PFG authentication returned no access token")
     if resp.get("refresh_token"):
-        save_pfg_refresh_token(resp["refresh_token"], config)
+        config["refresh_token"] = resp["refresh_token"]
+        if persist:
+            save_pfg_refresh_token(resp["refresh_token"], config)
     return f"Bearer {access}"
+
+
+def authenticate_pfg():
+    """Refresh from the shared credential chain and durably save the rotation."""
+    lease = VendorAuthClient.from_env(direct=True).claim(2)
+    config = lease.credentials
+    try:
+        bearer = refresh_bearer(config, persist=False)
+        lease.commit(config, verified=True)
+        return bearer, config
+    except Exception as ex:
+        lease.fail(ex)
+        raise
 
 
 # ── PFG API helper ────────────────────────────────────────────────────────────
@@ -386,8 +403,7 @@ class handler(BaseHTTPRequestHandler):
             if not items:
                 raise ValueError("No items in request body")
 
-            config = load_pfg_credentials()
-            bearer = refresh_bearer(config)
+            bearer, config = authenticate_pfg()
             result = place_pfg_order(bearer, config, items)
 
             payload = json.dumps({

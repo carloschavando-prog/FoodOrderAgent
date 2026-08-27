@@ -19,6 +19,8 @@ Supabase credentials:
 """
 import json, os, sys, uuid, time, subprocess, urllib.request, urllib.error, datetime
 
+from api.vendor_auth import VendorAuthClient
+
 # ── Config ────────────────────────────────────────────────
 SB_URL    = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY    = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
@@ -27,6 +29,7 @@ VENDOR_ID = 1  # US FOODS
 
 API_BASE   = "https://panamax-api.ama.usfoods.com"
 CONFIG_FILE = os.path.expanduser("~/.FoodOrderAgent/usf_api_config.json")
+_AUTH_LEASE = None
 
 SB_HDRS = {
     "apikey":        SB_KEY,
@@ -196,6 +199,7 @@ def refresh_token(config):
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"  ❌ Token refresh failed ({e.code}): {body[:200]}")
+        fail_config_lease(f"US Foods refresh failed (HTTP {e.code})")
         raise
 
     bearer = f"{resp['tokenType']} {resp['accessToken']}"
@@ -273,6 +277,17 @@ def get_prices(bearer, product_numbers, list_id):
 
 def load_config():
     """Load API config from GitHub Actions env vars or local file."""
+    global _AUTH_LEASE
+    if os.getenv("VENDOR_AUTH_BRIDGE_SECRET"):
+        client = VendorAuthClient.from_env()
+        if os.getenv("VENDOR_AUTH_BOOTSTRAP_FROM_ENV") == "true":
+            bootstrap = json.loads(os.environ["USF_CONFIG"])
+            bootstrap["refresh_token"] = os.environ["USF_REFRESH_TOKEN"]
+            client.replace(VENDOR_ID, bootstrap)
+            print("  Shared US Foods sign-on initialized from CI")
+        _AUTH_LEASE = client.claim(VENDOR_ID)
+        print("  Config loaded from shared vendor sign-on")
+        return _AUTH_LEASE.credentials
     if os.getenv("GITHUB_ACTIONS") == "true":
         config = json.loads(os.environ["USF_CONFIG"])
         config["refresh_token"] = os.environ["USF_REFRESH_TOKEN"]
@@ -287,6 +302,12 @@ def load_config():
 
 def save_config(config):
     """Persist updated refresh token — GitHub secret in CI, local file otherwise."""
+    global _AUTH_LEASE
+    if _AUTH_LEASE is not None:
+        _AUTH_LEASE.commit(config, verified=True)
+        _AUTH_LEASE = None
+        print("  ✅ Shared US Foods sign-on rotated")
+        return
     if os.getenv("GITHUB_ACTIONS") == "true":
         repo = os.environ.get("GITHUB_REPOSITORY", "")
         result = subprocess.run(
@@ -304,14 +325,21 @@ def save_config(config):
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
 
+
+def fail_config_lease(error):
+    global _AUTH_LEASE
+    if _AUTH_LEASE is not None:
+        _AUTH_LEASE.fail(error)
+        _AUTH_LEASE = None
+
 # ── Main ──────────────────────────────────────────────────
 
 def main():
-    config = load_config()
-
     # Load Supabase item master
     item_map = load_item_map()
     print(f"Loaded {len(item_map['by_name'])} items ({len(item_map['by_apn'])} with APNs)")
+
+    config = load_config()
 
     # Refresh Bearer token
     bearer = refresh_token(config)

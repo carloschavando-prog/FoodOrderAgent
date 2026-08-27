@@ -145,6 +145,178 @@ def _open_json(opener, request, stage, timeout=20):
         ) from ex
 
 
+def _idx_error(response, fallback):
+    messages = []
+    for message in (response.get("messages") or {}).get("value", []):
+        text = message.get("message")
+        if text:
+            messages.append(text)
+    return "; ".join(messages[:3]) or fallback
+
+
+def _idx_remediations(response):
+    return (response.get("remediation") or {}).get("value") or []
+
+
+def _idx_form_value(remediation, name):
+    for field in remediation.get("value") or []:
+        if field.get("name") == name:
+            return field.get("value")
+    return None
+
+
+def _idx_password_authenticator(remediation):
+    for field in remediation.get("value") or []:
+        if field.get("name") != "authenticator":
+            continue
+        for option in field.get("options") or []:
+            form = ((option.get("value") or {}).get("form") or {}).get("value") or []
+            values = {entry.get("name"): entry.get("value") for entry in form}
+            label = str(option.get("label", "")).lower()
+            if values.get("methodType") == "password" or "password" in label:
+                return {
+                    key: value
+                    for key, value in values.items()
+                    if value is not None
+                }
+    return None
+
+
+def _idx_post(opener, remediation, payload, stage):
+    href = remediation.get("href")
+    if not href:
+        raise RuntimeError(f"Sysco {stage} returned no remediation URL")
+    state_handle = _idx_form_value(remediation, "stateHandle")
+    if state_handle:
+        payload = {**payload, "stateHandle": state_handle}
+    request = urllib.request.Request(
+        href,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": remediation.get("accepts") or "application/ion+json",
+            "Accept": "application/ion+json; okta-version=1.0.0",
+            "User-Agent": _UA,
+            "Origin": OKTA_BASE,
+            "Referer": f"{OKTA_BASE}/",
+        },
+        method=remediation.get("method", "POST"),
+    )
+    return _open_json(opener, request, stage)
+
+
+def _idx_success_href(response):
+    for key in ("success", "successWithInteractionCode"):
+        value = response.get(key) or {}
+        if value.get("href"):
+            return value["href"]
+        nested = value.get("value")
+        if isinstance(nested, dict) and nested.get("href"):
+            return nested["href"]
+    return ""
+
+
+def _open_okta_success(opener, href):
+    try:
+        with opener.open(urllib.request.Request(
+            href,
+            headers={
+                "User-Agent": _UA,
+                "Accept": "text/html,application/xhtml+xml,*/*",
+                "Referer": f"{OKTA_BASE}/",
+            },
+        ), timeout=20) as response:
+            return response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as ex:
+        body = ex.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(
+            f"Sysco Okta completion failed (HTTP {ex.code}): {body or ex.reason}"
+        ) from ex
+
+
+def _complete_idx_password(opener, state_token, email, password):
+    """Complete Okta Identity Engine's server-directed password flow."""
+    response = _open_json(
+        opener,
+        urllib.request.Request(
+            f"{OKTA_BASE}/idp/idx/introspect",
+            data=json.dumps({"stateToken": state_token}).encode(),
+            headers={
+                "Content-Type": "application/ion+json; okta-version=1.0.0",
+                "Accept": "application/ion+json; okta-version=1.0.0",
+                "User-Agent": _UA,
+                "Origin": OKTA_BASE,
+                "Referer": f"{OKTA_BASE}/",
+            },
+            method="POST",
+        ),
+        "Okta IDX introspection",
+    )
+
+    for _ in range(8):
+        success_href = _idx_success_href(response)
+        if success_href:
+            return _open_okta_success(opener, success_href)
+
+        remediations = _idx_remediations(response)
+        by_name = {entry.get("name"): entry for entry in remediations}
+
+        if "identify" in by_name:
+            remediation = by_name["identify"]
+            payload = {"identifier": email}
+            if any(
+                field.get("name") == "credentials"
+                for field in remediation.get("value") or []
+            ):
+                payload["credentials"] = {"passcode": password}
+            response = _idx_post(
+                opener, remediation, payload, "Okta identity verification"
+            )
+            continue
+
+        if "select-authenticator-authenticate" in by_name:
+            remediation = by_name["select-authenticator-authenticate"]
+            authenticator = _idx_password_authenticator(remediation)
+            if not authenticator:
+                raise RuntimeError(
+                    "Sysco sign-on requires interactive verification; "
+                    "the service account needs password authentication enabled"
+                )
+            response = _idx_post(
+                opener,
+                remediation,
+                {"authenticator": authenticator},
+                "Okta password selection",
+            )
+            continue
+
+        if "challenge-authenticator" in by_name:
+            response = _idx_post(
+                opener,
+                by_name["challenge-authenticator"],
+                {"credentials": {"passcode": password}},
+                "Okta password verification",
+            )
+            continue
+
+        if "skip" in by_name:
+            response = _idx_post(
+                opener, by_name["skip"], {}, "Okta optional enrollment skip"
+            )
+            continue
+
+        redirect = by_name.get("redirect-idp")
+        if redirect and redirect.get("href"):
+            return _open_okta_success(opener, redirect["href"])
+
+        names = ", ".join(sorted(str(name) for name in by_name if name))
+        raise RuntimeError(
+            "Sysco Okta sign-on could not continue: "
+            + _idx_error(response, names or "no supported next step")
+        )
+
+    raise RuntimeError("Sysco Okta sign-on exceeded the expected number of steps")
+
+
 def get_bearer_token(email, password):
     """Authenticate with a current session cookie or Okta SAML and return API context."""
     cookies_raw = os.getenv("SYSCO_COOKIES", "").strip()
@@ -207,57 +379,12 @@ def get_bearer_token(email, password):
     if not state_token:
         raise RuntimeError("Could not extract the current Okta state token")
 
-    # This page labels the value as a stateToken even when it starts with
-    # "02.id.". It is not an IDX interactionHandle; sending it to
-    # /idp/idx/introspect makes Okta report an immediately expired session.
-    authn_response = _open_json(
-        opener,
-        urllib.request.Request(
-            f"{OKTA_BASE}/api/v1/authn",
-            data=json.dumps({
-                "password": password,
-                "username": email,
-                "options": {
-                    "warnBeforePasswordExpired": True,
-                    "multiOptionalFactorEnroll": False,
-                },
-                "stateToken": state_token,
-            }).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": _UA,
-                "Origin": OKTA_BASE,
-                "Referer": f"{OKTA_BASE}/",
-            },
-        ),
-        "Okta authentication",
+    # Sysco now serves an Identity Engine state handle (often beginning
+    # ``02.id.``).  It must go to IDX introspection as ``stateToken``; the
+    # retired Classic /api/v1/authn endpoint rejects it as an invalid token.
+    step_html = _complete_idx_password(
+        opener, state_token, email, password
     )
-    if authn_response.get("status") != "SUCCESS":
-        raise RuntimeError(
-            "Okta authentication did not complete "
-            f"(status={authn_response.get('status')!r})"
-        )
-
-    step_url = (
-        f"{OKTA_BASE}/login/step-up/redirect?stateToken="
-        f"{urllib.parse.quote(state_token)}"
-    )
-    try:
-        with opener.open(urllib.request.Request(
-            step_url,
-            headers={
-                "User-Agent": _UA,
-                "Accept": "text/html,application/xhtml+xml,*/*",
-                "Referer": f"{OKTA_BASE}/",
-            },
-        ), timeout=20) as response:
-            step_html = response.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as ex:
-        body = ex.read().decode("utf-8", errors="replace")[:500]
-        raise RuntimeError(
-            f"Sysco Okta SAML redirect failed (HTTP {ex.code}): {body or ex.reason}"
-        ) from ex
 
     parser = _FormParser()
     parser.feed(step_html)

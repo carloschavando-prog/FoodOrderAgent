@@ -27,16 +27,23 @@ class OrderReportOriginTests(unittest.TestCase):
         )
         self.assertIn("fetch(getOrderEndpoint(vid),{", source)
 
-    def test_report_stages_exact_lines_before_vendor_requests(self):
+    def test_report_preflights_before_staging_and_vendor_requests(self):
         source = pathlib.Path("api/generate_order.py").read_text()
+        submit_start = source.index("async function submitOrders(vendorIds){")
+        submit_source = source[submit_start:]
 
         self.assertIn('"order_lines": _order_lines', source)
-        self.assertIn("await stageGeneratedOrder();", source)
+        self.assertIn("await preflightVendors(vendors);", submit_source)
+        self.assertIn("await stageGeneratedOrder();", submit_source)
         self.assertLess(
-            source.index("await stageGeneratedOrder();"),
-            source.index("fetch(getOrderEndpoint(vid),{"),
+            submit_source.index("await preflightVendors(vendors);"),
+            submit_source.index("await stageGeneratedOrder();"),
         )
-        self.assertIn("Check the Supabase server configuration and try again", source)
+        self.assertLess(
+            submit_source.index("await stageGeneratedOrder();"),
+            submit_source.index("fetch(getOrderEndpoint(vid),{"),
+        )
+        self.assertIn("No order was saved or submitted", submit_source)
 
     def test_report_can_save_a_draft_without_submitting_to_vendors(self):
         source = pathlib.Path("api/generate_order.py").read_text()

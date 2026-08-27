@@ -20,6 +20,8 @@ Supabase credentials:
 """
 import json, os, sys, re, subprocess, urllib.request, urllib.error, urllib.parse, datetime
 
+from api.vendor_auth import VendorAuthClient
+
 # ── Config ─────────────────────────────────────────────────
 SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY     = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
@@ -28,6 +30,7 @@ VENDOR_ID  = 2   # PFG
 DEFAULT_LIST_ID = "168ef1b1-5354-4883-8c26-69a180f6a0ef"  # Spring 2026
 
 CONFIG_FILE = os.path.expanduser("~/.FoodOrderAgent/pfg_api_config.json")
+_AUTH_LEASE = None
 
 # Azure B2C MSAL token endpoint
 B2C_TOKEN_URL = (
@@ -146,6 +149,17 @@ def match_item(name, apn, item_map):
 
 def load_config():
     """Load API config from GitHub Actions env vars or local file."""
+    global _AUTH_LEASE
+    if os.getenv("VENDOR_AUTH_BRIDGE_SECRET"):
+        client = VendorAuthClient.from_env()
+        if os.getenv("VENDOR_AUTH_BOOTSTRAP_FROM_ENV") == "true":
+            bootstrap = json.loads(os.environ["PFG_CONFIG"])
+            bootstrap["refresh_token"] = os.environ["PFG_REFRESH_TOKEN"]
+            client.replace(VENDOR_ID, bootstrap)
+            print("  Shared PFG sign-on initialized from CI")
+        _AUTH_LEASE = client.claim(VENDOR_ID)
+        print("  Config loaded from shared vendor sign-on")
+        return _AUTH_LEASE.credentials
     if os.getenv("GITHUB_ACTIONS") == "true":
         config = json.loads(os.environ["PFG_CONFIG"])
         config["refresh_token"] = os.environ["PFG_REFRESH_TOKEN"]
@@ -160,6 +174,12 @@ def load_config():
 
 def save_config(config):
     """Persist updated refresh token — GitHub secret in CI, local file otherwise."""
+    global _AUTH_LEASE
+    if _AUTH_LEASE is not None:
+        _AUTH_LEASE.commit(config, verified=True)
+        _AUTH_LEASE = None
+        print("  ✅ Shared PFG sign-on rotated")
+        return
     if os.getenv("GITHUB_ACTIONS") == "true":
         repo   = os.environ.get("GITHUB_REPOSITORY", "")
         result = subprocess.run(
@@ -176,6 +196,13 @@ def save_config(config):
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
+
+
+def fail_config_lease(error):
+    global _AUTH_LEASE
+    if _AUTH_LEASE is not None:
+        _AUTH_LEASE.fail(error)
+        _AUTH_LEASE = None
 
 # ── PFG API helpers ────────────────────────────────────────
 
@@ -222,6 +249,7 @@ def refresh_token(config):
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"  ❌ Token refresh failed ({e.code}): {body[:300]}")
+        fail_config_lease(f"PFG refresh failed (HTTP {e.code})")
         raise
 
     access = resp.get("access_token") or resp.get("id_token")
@@ -374,6 +402,9 @@ def get_prices(bearer, customer_id, order_id, opco_number, biz_unit, delivery_da
 
 def main():
     config      = load_config()
+    delete_stale_order = config.get("delete_stale_order", True)
+    # Persist this flag in the same atomic commit as the token rotation.
+    config["delete_stale_order"] = False
     customer_id = config.get("customer_id", "ccbddeae-bc43-4287-a4e0-8d5bee2b913c")
     list_id = (
         os.getenv("PFG_LIST_ID")
@@ -393,10 +424,8 @@ def main():
 
     # Clean up the accidentally created order from exploration (one-time)
     stale_order = "b9c31091-9956-421c-af96-1baa913cbe04"
-    if config.get("delete_stale_order", True):
+    if delete_stale_order:
         delete_order(bearer, stale_order, customer_id)
-        config["delete_stale_order"] = False
-        save_config(config)
 
     opco_number = config.get("opco_number", "795")
 

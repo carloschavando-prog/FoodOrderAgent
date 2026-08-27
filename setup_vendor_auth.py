@@ -19,6 +19,8 @@ Vendor IDs:
 
 import json, os, sys, urllib.request, urllib.error
 
+from api.vendor_auth import VendorAuthClient
+
 SB_URL  = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_SKEY = os.getenv("SUPABASE_SERVICE_KEY")
 
@@ -59,8 +61,13 @@ def ensure_table():
 # ── Supabase upsert ───────────────────────────────────────────────────────────
 
 def upsert(vendor_id, credentials):
+    if not SB_SKEY and os.getenv("VENDOR_AUTH_BRIDGE_SECRET"):
+        VendorAuthClient.from_env().replace(vendor_id, credentials)
+        return True
     if not SB_SKEY:
-        raise RuntimeError("SUPABASE_SERVICE_KEY is required for vendor credentials")
+        raise RuntimeError(
+            "SUPABASE_SERVICE_KEY or VENDOR_AUTH_BRIDGE_SECRET is required"
+        )
     key = SB_SKEY
     hdrs = {
         "apikey":        key,
@@ -172,13 +179,14 @@ VENDOR_MAP = {"usf": setup_usf, "usfoods": setup_usf,
 def main():
     args = [a.lower() for a in sys.argv[1:]]
 
-    if not SB_SKEY:
+    if not SB_SKEY and not os.getenv("VENDOR_AUTH_BRIDGE_SECRET"):
         raise SystemExit(
-            "SUPABASE_SERVICE_KEY is required. Set the Supabase service-role key "
+            "SUPABASE_SERVICE_KEY or VENDOR_AUTH_BRIDGE_SECRET is required "
             "before updating vendor credentials."
         )
 
-    ensure_table()
+    if SB_SKEY:
+        ensure_table()
 
     if args:
         for arg in args:

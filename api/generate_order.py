@@ -1565,6 +1565,19 @@ function getFinalizeEndpoint(){
 function getStageEndpoint(){
   return new URL('/api/stage_order', document.baseURI).href;
 }
+function getPreflightEndpoint(){
+  return new URL('/api/vendor_preflight', document.baseURI).href;
+}
+async function preflightVendors(vendorIds){
+  var resp=await fetch(getPreflightEndpoint(),{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({vendorIds:vendorIds})
+  });
+  var data=await resp.json();
+  if(!resp.ok) throw new Error(data.error||'Vendor sign-on check failed');
+  return data;
+}
 async function stageGeneratedOrder(){
   if(ORDER_STAGED) return;
   var resp=await fetch(getStageEndpoint(),{
@@ -1640,14 +1653,35 @@ async function submitOrders(vendorIds){
   vendors=vendors.filter(function(vid){return !(ORDER_RESULTS[vid]&&ORDER_RESULTS[vid].success);});
   var container=document.getElementById('status-rows');
   if(vendors.length){
-    container.innerHTML='<div id="order-stage-status" class="status-row">'
-      +'<span class="spin">⏳</span>&nbsp;<strong>Order record:</strong> Saving item details before submission…</div>';
+    document.getElementById('progress-copy').textContent='Checking shared vendor sign-ons…';
+    container.innerHTML='<div id="vendor-preflight-status" class="status-row">'
+      +'<span class="spin">⏳</span>&nbsp;<strong>Vendor sign-ons:</strong> '
+      +'Verifying access before anything is saved or submitted…</div>';
     try{
+      var preflight=await preflightVendors(vendors);
+      if(!preflight.success){
+        container.innerHTML=(preflight.results||[]).map(function(result){
+          return '<div class="status-row '+(result.ready?'status-ok':'status-err')+'">'
+            +(result.ready?'✅ ':'❌ ')+'<strong>'+result.vendor+'</strong>: '
+            +(result.ready?'Shared sign-on is ready.':(result.error||'Sign-on failed'))+'</div>';
+        }).join('');
+        container.innerHTML+='<div class="status-row status-err">❌ <strong>Nothing placed:</strong> '
+          +(preflight.error||'No order was saved or submitted. Fix the vendor sign-on and try again.')+'</div>';
+        document.querySelectorAll('.order-submit-btn').forEach(function(button){button.disabled=false;});
+        document.getElementById('done-actions').style.display='flex';
+        return;
+      }
+      container.innerHTML='<div class="status-row status-ok">✅ <strong>Vendor sign-ons:</strong> '
+        +'All selected vendors are ready.</div>'
+        +'<div id="order-stage-status" class="status-row"><span class="spin">⏳</span>&nbsp;'
+        +'<strong>Order record:</strong> Saving item details before submission…</div>';
+      document.getElementById('progress-copy').textContent='Saving the order, then submitting to vendors…';
       await stageGeneratedOrder();
-      container.innerHTML='<div class="status-row status-ok">✅ <strong>Order record:</strong> Item details saved.</div>';
+      document.getElementById('order-stage-status').className='status-row status-ok';
+      document.getElementById('order-stage-status').innerHTML='✅ <strong>Order record:</strong> Item details saved.';
     }catch(e){
-      container.innerHTML='<div class="status-row status-err">❌ <strong>Order not submitted:</strong> '
-        +e.message+'. Check the Supabase server configuration and try again.</div>';
+      container.innerHTML='<div class="status-row status-err">❌ <strong>Nothing placed:</strong> '
+        +e.message+'. Try again or ask an administrator to reconnect the vendor sign-on.</div>';
       document.querySelectorAll('.order-submit-btn').forEach(function(button){button.disabled=false;});
       document.getElementById('done-actions').style.display='flex';
       return;

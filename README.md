@@ -66,7 +66,7 @@ name lookups rather than environment-specific generated IDs.
 
 | # | Vendor | Status | vendor_id | Auth method |
 |---|--------|--------|-----------|-------------|
-| 1 | US Foods | ✅ Live | 1 | Azure B2C OAuth2 (JSON body) |
+| 1 | US Foods | ✅ Live | 1 | Panamax rotating OAuth token (shared server chain) |
 | 2 | PFG CustomerFirst | ✅ Live | 2 | MSAL B2C (form-encoded, `client_info=1`) |
 | 3 | Sysco | ✅ Live | 3 | Okta SAML2 step-up + GraphQL (programmatic) |
 | 4 | GFS Gordon Food Service | 🗄️ Temporarily archived | 4 | Okta SAML2 session cookies (`GFS_COOKIES` retained for restoration) |
@@ -84,10 +84,11 @@ formats currently use US Foods, PFG, and Sysco only.
 | `SUPABASE_URL` | Secret | Supabase project URL |
 | `SUPABASE_KEY` | Secret | Supabase publishable key |
 | `GH_PAT` | Secret | GitHub PAT with repo secrets write permission |
-| `USF_REFRESH_TOKEN` | Secret | US Foods refresh token (auto-rotated each run) |
-| `USF_CONFIG` | Secret | US Foods static config JSON |
-| `PFG_REFRESH_TOKEN` | Secret | PFG MSAL refresh token (auto-rotated each run) |
-| `PFG_CONFIG` | Secret | PFG static config JSON |
+| `VENDOR_AUTH_BRIDGE_SECRET` | Secret | Same random value as Vercel; grants CI access only to the US Foods/PFG shared credential bridge |
+| `USF_REFRESH_TOKEN` | Bootstrap secret | Recovery copy used only by the manual `bootstrap_vendor_auth=usfoods` workflow option |
+| `USF_CONFIG` | Bootstrap secret | US Foods recovery config JSON |
+| `PFG_REFRESH_TOKEN` | Bootstrap secret | Recovery copy used only by the manual `bootstrap_vendor_auth=pfg` workflow option |
+| `PFG_CONFIG` | Bootstrap secret | PFG recovery config JSON |
 | `GFS_COOKIES` | Archived secret | Retained only for a future GFS restoration |
 | `SYSCO_EMAIL` | Secret | Sysco login email (`carlos@onparbar.com`) |
 | `SYSCO_PASSWORD` | Secret | Sysco login password |
@@ -279,11 +280,18 @@ access only to server-side `service_role`. The APIs require
 client code. Current Supabase projects require explicit Data API grants for new
 tables, which are included in `schema.sql`.
 
-The Place Orders workflow calls `/api/stage_order` before contacting a vendor.
-If the order header, exact item lines, and decision evidence cannot be saved,
-vendor submission is stopped with a visible error. Successful vendor responses
-then finalize that same staged order. This preserves access to ordered items
-even if later feedback preparation fails.
+The Place Orders workflow first calls `/api/vendor_preflight` for every selected
+vendor. It rotates and verifies shared server sign-ons using short database
+leases and makes only read-only availability requests. If any sign-on fails,
+nothing is saved or submitted. After all vendors are ready, `/api/stage_order`
+saves the exact lines and vendor submission begins. Successful vendor responses
+then finalize that staged order.
+
+US Foods and PFG use `vendor_auth` as their single rotating credential source.
+The Vercel functions access it with `SUPABASE_SERVICE_KEY`; GitHub Actions uses
+the restricted `/api/vendor_auth_bridge` with `VENDOR_AUTH_BRIDGE_SECRET` so the
+database service-role key is never copied into CI. The same bridge secret must
+exist in both Vercel Production and GitHub Actions.
 
 ## Event Kitchen party demand
 

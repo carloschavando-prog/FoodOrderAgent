@@ -222,18 +222,131 @@ JOIN (
 ) cp_max ON cp_max.item_id = bi.item_id
 GROUP BY b.id, b.name, b.total_cost;
 
--- VENDOR TOKENS (rotating API credentials per vendor) ----
--- Used for vendors whose portals expose an internal REST API
--- (US Foods panamax-api, and others discovered via intercept_api.py).
--- In GitHub Actions the refresh token is stored as the USF_REFRESH_TOKEN
--- secret and rotated after each run. This table is for local / dashboard use.
-CREATE TABLE IF NOT EXISTS vendor_tokens (
-  id            SERIAL PRIMARY KEY,
-  vendor_id     INT  NOT NULL REFERENCES vendors(id) UNIQUE,
-  refresh_token TEXT,
-  config_json   JSONB NOT NULL DEFAULT '{}',
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+-- SHARED VENDOR AUTH (rotating API credentials) -----------
+-- This is the single source of truth for US Foods and PFG. A short lease
+-- serializes refresh-token rotation without holding a database transaction
+-- open during the external vendor request.
+CREATE TABLE IF NOT EXISTS vendor_auth (
+  vendor_id        INT PRIMARY KEY REFERENCES vendors(id),
+  credentials      JSONB NOT NULL DEFAULT '{}',
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  lease_owner      UUID,
+  lease_expires_at TIMESTAMPTZ,
+  last_verified_at TIMESTAMPTZ,
+  last_error       TEXT
 );
+
+ALTER TABLE vendor_auth ADD COLUMN IF NOT EXISTS lease_owner UUID;
+ALTER TABLE vendor_auth ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+ALTER TABLE vendor_auth ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ;
+ALTER TABLE vendor_auth ADD COLUMN IF NOT EXISTS last_error TEXT;
+ALTER TABLE vendor_auth ENABLE ROW LEVEL SECURITY;
+REVOKE ALL PRIVILEGES ON TABLE vendor_auth FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vendor_auth TO service_role;
+
+CREATE OR REPLACE FUNCTION claim_vendor_auth(
+  p_vendor_id INT,
+  p_owner UUID,
+  p_lease_seconds INT DEFAULT 45
+)
+RETURNS TABLE(credentials JSONB)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE public.vendor_auth AS auth
+     SET lease_owner = p_owner,
+         lease_expires_at = clock_timestamp() +
+           make_interval(secs => LEAST(GREATEST(p_lease_seconds, 5), 120))
+   WHERE auth.vendor_id = p_vendor_id
+     AND (
+       auth.lease_expires_at IS NULL
+       OR auth.lease_expires_at < clock_timestamp()
+       OR auth.lease_owner = p_owner
+     )
+  RETURNING auth.credentials;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION complete_vendor_auth(
+  p_vendor_id INT,
+  p_owner UUID,
+  p_credentials JSONB,
+  p_verified BOOLEAN DEFAULT TRUE
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  changed INT;
+BEGIN
+  UPDATE public.vendor_auth AS auth
+     SET credentials = p_credentials,
+         updated_at = clock_timestamp(),
+         last_verified_at = CASE
+           WHEN p_verified THEN clock_timestamp()
+           ELSE auth.last_verified_at
+         END,
+         last_error = NULL,
+         lease_owner = NULL,
+         lease_expires_at = NULL
+   WHERE auth.vendor_id = p_vendor_id
+     AND auth.lease_owner = p_owner
+     AND auth.lease_expires_at >= clock_timestamp();
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  IF changed = 1 THEN
+    RETURN TRUE;
+  END IF;
+  -- Makes a retry safe if the database committed but the HTTP response was
+  -- lost after the lease was cleared.
+  RETURN EXISTS (
+    SELECT 1
+      FROM public.vendor_auth AS auth
+     WHERE auth.vendor_id = p_vendor_id
+       AND auth.credentials = p_credentials
+       AND auth.lease_owner IS NULL
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION fail_vendor_auth(
+  p_vendor_id INT,
+  p_owner UUID,
+  p_error TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  changed INT;
+BEGIN
+  UPDATE public.vendor_auth AS auth
+     SET last_error = LEFT(p_error, 500),
+         lease_owner = NULL,
+         lease_expires_at = NULL
+   WHERE auth.vendor_id = p_vendor_id
+     AND auth.lease_owner = p_owner;
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  RETURN changed = 1;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION claim_vendor_auth(INT, UUID, INT)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION complete_vendor_auth(INT, UUID, JSONB, BOOLEAN)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION fail_vendor_auth(INT, UUID, TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION claim_vendor_auth(INT, UUID, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION complete_vendor_auth(INT, UUID, JSONB, BOOLEAN)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION fail_vendor_auth(INT, UUID, TEXT) TO service_role;
 
 -- RLS: enable row-level security on sensitive tables ------
 ALTER TABLE pricing     ENABLE ROW LEVEL SECURITY;

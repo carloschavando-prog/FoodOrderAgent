@@ -9,6 +9,8 @@
     "api/place_order_pfg.py":     {"maxDuration": 60},
     "api/place_order_sysco.py":   {"maxDuration": 60},
     "api/place_order_gfs.py":     {"maxDuration": 60},
+    "api/vendor_preflight.py":    {"maxDuration": 60},
+    "api/vendor_auth_bridge.py":  {"maxDuration": 30},
     "api/finalize_order.py":      {"maxDuration": 30},
     "api/order_feedback.py":      {"maxDuration": 30}
   }

@@ -11,6 +11,26 @@ from api import place_order_usfoods as usfoods
 
 
 class UsFoodsOrderSubmissionTests(unittest.TestCase):
+    def test_shared_auth_commits_rotated_token_before_returning_bearer(self):
+        lease = mock.Mock()
+        lease.credentials = {"refresh_token": "old", "auth_context": {}}
+        store = mock.Mock()
+        store.claim.return_value = lease
+
+        def rotate(config, *, persist):
+            self.assertFalse(persist)
+            config["refresh_token"] = "new"
+            return "Bearer current"
+
+        with mock.patch.object(
+            usfoods.VendorAuthClient, "from_env", return_value=store
+        ), mock.patch.object(usfoods, "refresh_bearer", side_effect=rotate):
+            bearer, credentials = usfoods.authenticate_usfoods()
+
+        self.assertEqual("Bearer current", bearer)
+        self.assertEqual("new", credentials["refresh_token"])
+        lease.commit.assert_called_once_with(credentials, verified=True)
+
     def test_supabase_token_remains_primary_when_env_bootstrap_exists(self):
         rows = [{"credentials": {
             "refresh_token": "stale-token",
@@ -113,6 +133,70 @@ class UsFoodsOrderSubmissionTests(unittest.TestCase):
 
 
 class SyscoOrderSubmissionTests(unittest.TestCase):
+    def test_idx_password_flow_uses_state_token_and_current_remediations(self):
+        identify = {
+            "name": "identify",
+            "href": "https://secure.sysco.com/idp/idx/identify",
+            "value": [{"name": "stateHandle", "value": "state-1"}],
+        }
+        select = {
+            "name": "select-authenticator-authenticate",
+            "href": "https://secure.sysco.com/idp/idx/challenge",
+            "value": [
+                {
+                    "name": "authenticator",
+                    "options": [{
+                        "label": "Okta Password",
+                        "value": {"form": {"value": [
+                            {"name": "id", "value": "password-id"},
+                            {"name": "methodType", "value": "password"},
+                        ]}},
+                    }],
+                },
+                {"name": "stateHandle", "value": "state-2"},
+            ],
+        }
+        challenge = {
+            "name": "challenge-authenticator",
+            "href": "https://secure.sysco.com/idp/idx/challenge/answer",
+            "value": [{"name": "stateHandle", "value": "state-3"}],
+        }
+        responses = [
+            {"remediation": {"value": [identify]}},
+            {"remediation": {"value": [select]}},
+            {"remediation": {"value": [challenge]}},
+            {"success": {"href": "https://secure.sysco.com/login/success"}},
+        ]
+
+        with mock.patch.object(
+            sysco, "_open_json", return_value=responses[0]
+        ) as introspect, mock.patch.object(
+            sysco, "_idx_post", side_effect=responses[1:]
+        ) as post, mock.patch.object(
+            sysco, "_open_okta_success", return_value="<form>SAML</form>"
+        ):
+            result = sysco._complete_idx_password(
+                mock.Mock(), "02.id.current", "user@example.com", "secret"
+            )
+
+        self.assertEqual("<form>SAML</form>", result)
+        introspect_request = introspect.call_args.args[1]
+        self.assertEqual(
+            {"stateToken": "02.id.current"},
+            json.loads(introspect_request.data),
+        )
+        self.assertEqual(
+            {"identifier": "user@example.com"}, post.call_args_list[0].args[2]
+        )
+        self.assertEqual(
+            {"authenticator": {"id": "password-id", "methodType": "password"}},
+            post.call_args_list[1].args[2],
+        )
+        self.assertEqual(
+            {"credentials": {"passcode": "secret"}},
+            post.call_args_list[2].args[2],
+        )
+
     def test_create_order_input_matches_current_graphql_contract(self):
         result = sysco._create_order_input(
             [{"productId": "0534567", "qty": 3}],
@@ -282,6 +366,25 @@ class SyscoOrderSubmissionTests(unittest.TestCase):
 
 
 class PfgOrderSubmissionTests(unittest.TestCase):
+    def test_shared_auth_commits_rotated_token_before_returning_bearer(self):
+        lease = mock.Mock()
+        lease.credentials = {"refresh_token": "old"}
+        store = mock.Mock()
+        store.claim.return_value = lease
+
+        def rotate(config, *, persist):
+            self.assertFalse(persist)
+            config["refresh_token"] = "new"
+            return "Bearer current"
+
+        with mock.patch.object(
+            pfg.VendorAuthClient, "from_env", return_value=store
+        ), mock.patch.object(pfg, "refresh_bearer", side_effect=rotate):
+            bearer, credentials = pfg.authenticate_pfg()
+
+        self.assertEqual("Bearer current", bearer)
+        lease.commit.assert_called_once_with(credentials, verified=True)
+
     def test_create_header_uses_current_customer_payload(self):
         responses = [
             {"IsSuccess": True, "ResultObject": {}},
