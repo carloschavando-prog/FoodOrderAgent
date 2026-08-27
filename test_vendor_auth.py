@@ -2,6 +2,7 @@ import unittest
 from unittest import mock
 
 from api import vendor_auth
+import refresh_vendor_auth_ci
 
 
 class VendorAuthClientTests(unittest.TestCase):
@@ -47,6 +48,35 @@ class VendorAuthClientTests(unittest.TestCase):
 
         client.fail.assert_called_once_with(1, "owner-3", "vendor unavailable")
         client.commit.assert_not_called()
+
+    def test_keepalive_commits_rotation_without_vendor_order_calls(self):
+        lease = mock.Mock()
+        lease.credentials = {"refresh_token": "old"}
+        client = mock.Mock()
+        client.claim.return_value = lease
+
+        def rotate(config, *, persist):
+            self.assertFalse(persist)
+            config["refresh_token"] = "new"
+            return "Bearer access"
+
+        with mock.patch.object(
+            refresh_vendor_auth_ci.VendorAuthClient,
+            "from_env",
+            return_value=client,
+        ), mock.patch.object(
+            refresh_vendor_auth_ci.pfg,
+            "refresh_bearer",
+            side_effect=rotate,
+        ), mock.patch.object(
+            refresh_vendor_auth_ci.pfg, "place_pfg_order"
+        ) as place_order:
+            refresh_vendor_auth_ci.refresh_vendor("pfg")
+
+        lease.commit.assert_called_once_with(
+            {"refresh_token": "new"}, verified=True
+        )
+        place_order.assert_not_called()
 
 
 if __name__ == "__main__":

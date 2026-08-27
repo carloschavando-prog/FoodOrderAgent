@@ -292,6 +292,9 @@ The Vercel functions access it with `SUPABASE_SERVICE_KEY`; GitHub Actions uses
 the restricted `/api/vendor_auth_bridge` with `VENDOR_AUTH_BRIDGE_SECRET` so the
 database service-role key is never copied into CI. The same bridge secret must
 exist in both Vercel Production and GitHub Actions.
+The `Keep Vendor Sign-Ons Active` workflow rotates both grants every two hours
+without reading vendor data or creating an order. This interval is required
+because PFG's refresh grant expires in under five hours if it is not used.
 
 ## Event Kitchen party demand
 

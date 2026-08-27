@@ -252,6 +252,10 @@ def _complete_idx_password(opener, state_token, email, password):
         "Okta IDX introspection",
     )
 
+    identified = False
+    password_selected = False
+    password_challenged = False
+    visited = []
     for _ in range(8):
         success_href = _idx_success_href(response)
         if success_href:
@@ -259,21 +263,31 @@ def _complete_idx_password(opener, state_token, email, password):
 
         remediations = _idx_remediations(response)
         by_name = {entry.get("name"): entry for entry in remediations}
+        visited.append(",".join(sorted(str(name) for name in by_name if name)))
 
-        if "identify" in by_name:
-            remediation = by_name["identify"]
-            payload = {"identifier": email}
-            if any(
-                field.get("name") == "credentials"
-                for field in remediation.get("value") or []
-            ):
-                payload["credentials"] = {"passcode": password}
+        if "challenge-authenticator" in by_name:
+            if password_challenged:
+                raise RuntimeError(
+                    "Sysco Okta password verification was not accepted: "
+                    + _idx_error(response, "authentication failed")
+                )
             response = _idx_post(
-                opener, remediation, payload, "Okta identity verification"
+                opener,
+                by_name["challenge-authenticator"],
+                {"credentials": {"passcode": password}},
+                "Okta password verification",
             )
+            password_challenged = True
             continue
 
+        # Okta often keeps "identify" available after it has accepted the
+        # username. Prefer the new authenticator step so we do not resubmit the
+        # identifier until the transaction expires.
         if "select-authenticator-authenticate" in by_name:
+            if password_selected:
+                raise RuntimeError(
+                    "Sysco Okta did not accept the password authenticator"
+                )
             remediation = by_name["select-authenticator-authenticate"]
             authenticator = _idx_password_authenticator(remediation)
             if not authenticator:
@@ -287,15 +301,21 @@ def _complete_idx_password(opener, state_token, email, password):
                 {"authenticator": authenticator},
                 "Okta password selection",
             )
+            password_selected = True
             continue
 
-        if "challenge-authenticator" in by_name:
+        if "identify" in by_name and not identified:
+            remediation = by_name["identify"]
+            payload = {"identifier": email}
+            if any(
+                field.get("name") == "credentials"
+                for field in remediation.get("value") or []
+            ):
+                payload["credentials"] = {"passcode": password}
             response = _idx_post(
-                opener,
-                by_name["challenge-authenticator"],
-                {"credentials": {"passcode": password}},
-                "Okta password verification",
+                opener, remediation, payload, "Okta identity verification"
             )
+            identified = True
             continue
 
         if "skip" in by_name:
@@ -314,7 +334,10 @@ def _complete_idx_password(opener, state_token, email, password):
             + _idx_error(response, names or "no supported next step")
         )
 
-    raise RuntimeError("Sysco Okta sign-on exceeded the expected number of steps")
+    raise RuntimeError(
+        "Sysco Okta sign-on exceeded the expected number of steps "
+        f"({'; '.join(visited)})"
+    )
 
 
 def get_bearer_token(email, password):

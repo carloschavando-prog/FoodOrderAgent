@@ -1,0 +1,33 @@
+name: Keep Vendor Sign-Ons Active
+
+on:
+  schedule:
+    # PFG refresh grants expire in under five hours. Two-hour rotation leaves
+    # room for normal GitHub scheduling delays.
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: vendor-auth-keepalive
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh ${{ matrix.vendor }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        vendor: [usfoods, pfg]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Rotate shared sign-on
+        env:
+          VENDOR_AUTH_BRIDGE_URL: https://food-order-agent-psi.vercel.app/api/vendor_auth_bridge
+          VENDOR_AUTH_BRIDGE_SECRET: ${{ secrets.VENDOR_AUTH_BRIDGE_SECRET }}
+        run: python3 refresh_vendor_auth_ci.py ${{ matrix.vendor }}
