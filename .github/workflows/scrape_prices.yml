@@ -22,8 +22,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  bootstrap-vendor-auth:
+    name: Bootstrap Shared Vendor Sign-On
+    if: github.event_name == 'workflow_dispatch' && inputs.bootstrap_vendor_auth != 'none'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bootstrap US Foods without scraping
+        if: inputs.bootstrap_vendor_auth == 'usfoods'
+        env:
+          BOOTSTRAP_VENDOR: usfoods
+          USF_REFRESH_TOKEN: ${{ secrets.USF_REFRESH_TOKEN }}
+          USF_CONFIG: ${{ secrets.USF_CONFIG }}
+          VENDOR_AUTH_BRIDGE_URL: https://food-order-agent-psi.vercel.app/api/vendor_auth_bridge
+          VENDOR_AUTH_BRIDGE_SECRET: ${{ secrets.VENDOR_AUTH_BRIDGE_SECRET }}
+        run: python3 bootstrap_vendor_auth_ci.py
+
+      - name: Bootstrap PFG without scraping
+        if: inputs.bootstrap_vendor_auth == 'pfg'
+        env:
+          BOOTSTRAP_VENDOR: pfg
+          PFG_REFRESH_TOKEN: ${{ secrets.PFG_REFRESH_TOKEN }}
+          PFG_CONFIG: ${{ secrets.PFG_CONFIG }}
+          VENDOR_AUTH_BRIDGE_URL: https://food-order-agent-psi.vercel.app/api/vendor_auth_bridge
+          VENDOR_AUTH_BRIDGE_SECRET: ${{ secrets.VENDOR_AUTH_BRIDGE_SECRET }}
+        run: python3 bootstrap_vendor_auth_ci.py
+
   usfoods:
     name: US Foods
+    if: github.event_name == 'schedule' || inputs.bootstrap_vendor_auth == 'none'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +80,7 @@ jobs:
 
   pfg:
     name: PFG CustomerFirst
+    if: github.event_name == 'schedule' || inputs.bootstrap_vendor_auth == 'none'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +105,7 @@ jobs:
 
   sysco:
     name: Sysco
+    if: github.event_name == 'schedule' || inputs.bootstrap_vendor_auth == 'none'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +127,7 @@ jobs:
   report:
     name: Basket Report
     needs: [usfoods, pfg, sysco]
-    if: always()
+    if: always() && (github.event_name == 'schedule' || inputs.bootstrap_vendor_auth == 'none')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
