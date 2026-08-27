@@ -4,7 +4,8 @@ POST /api/place_order_pfg
 Places a PFG CustomerFirst order via the Azure REST API.
 
 Body JSON:
-  {"items": [{"productKey": "35795bd7-...", "uomType": "CS", "qty": 3}, ...]}
+  {"orderId": "generated-order-uuid",
+   "items": [{"productKey": "35795bd7-...", "uomType": "CS", "qty": 3}, ...]}
 
 Returns JSON:
   {"success": true, "orderHeaderId": "...", "confirmationNumber": "...",
@@ -17,11 +18,11 @@ Auth:
 
 Order flow:
   1. Load creds, refresh B2C token
-  2. GET OrderEntryHeader/V1/GetActiveOrder  → use existing draft, or
-     POST OrderEntryHeader/V1/CreateOrderEntryHeader → create new draft
-  3. POST OrderEntryDetail/V1/AddOrderEntryDetails (bulk add)
-  4. POST OrderEntryHeader/V1/SubmitOrderEntryHeader → submit
-  5. Return ConfirmationOrderNumber
+  2. Resolve products from the saved guide, then the global PFG catalog
+  3. POST OrderEntryHeader/V1/CreateOrderEntryHeader → create a clean draft
+  4. POST OrderEntryDetail/V1/UpdateOrderEntryDetail for each item
+  5. POST OrderEntryHeader/V1/SubmitOrderEntryHeader → submit
+  6. Return ConfirmationOrderNumber
 """
 
 import datetime
@@ -50,6 +51,26 @@ B2C_SCOPE = (
     "https://pfgcustomerfirst.onmicrosoft.com/api/customer-first-site-api "
     "openid profile offline_access"
 )
+
+ZERO_UUID = "00000000-0000-0000-0000-000000000000"
+DEFAULT_CATALOG_FILTER = {
+    "IsLocallyStockedItem": None,
+    "IsCriticalItem": None,
+    "IsNewInStock": None,
+    "HasOrderedInLastNumberOfDays": None,
+    "HasPreviousPurchase": None,
+    "Badges": [],
+    "CategoryIds": [],
+    "Brand": None,
+    "Brands": [],
+    "PackSize": None,
+    "StorageTypes": [],
+    "StateOfOriginAbbreviation": None,
+    "StateOfOriginAbbreviations": [],
+    "DeliveryOptions": {},
+    "Nutritional": {},
+    "Manufacturers": [],
+}
 
 # ── Credential loading / saving ───────────────────────────────────────────────
 
@@ -188,24 +209,15 @@ def pfg_call(method, endpoint, bearer, payload=None, params=None, stage="API req
 
 # ── Order placement ───────────────────────────────────────────────────────────
 
-def get_or_create_order_header(bearer, customer_id):
+def create_order_header(bearer, customer_id):
     """
-    Get the current active/draft order header, or create a new one.
+    Create a clean PFG draft owned by this submission.
+
+    CustomerFirst can contain unrelated manual drafts. Reusing its generic
+    active order risks submitting somebody else's quantities, so automated
+    orders always start from a fresh header after all products resolve.
     Returns (order_entry_header_id, delivery_date).
     """
-    # Try to get the active order first (avoids creating duplicates)
-    resp = pfg_call(
-        "GET",
-        "OrderEntryHeader/V1/GetActiveOrder",
-        bearer,
-        params={"CustomerId": customer_id},
-        stage="active-order lookup",
-    )
-    ro = resp.get("ResultObject") or {}
-    if ro.get("OrderEntryHeaderId"):
-        return ro["OrderEntryHeaderId"], ro.get("DeliveryDate", "")
-
-    # Create new draft order
     resp = pfg_call(
         "POST",
         "OrderEntryHeader/V1/CreateOrderEntryHeader",
@@ -268,9 +280,103 @@ def _load_order_guide_products(bearer, config):
     return products
 
 
+def _catalog_search_context(bearer, config):
+    """Build the read-only context used by CustomerFirst's global search."""
+    customer_id = config.get(
+        "customer_id", "ccbddeae-bc43-4287-a4e0-8d5bee2b913c"
+    )
+    active = {}
+    try:
+        response = pfg_call(
+            "GET",
+            "OrderEntryHeader/V1/GetActiveOrder",
+            bearer,
+            params={"CustomerId": customer_id},
+            stage="catalog context lookup",
+        )
+        active = response.get("ResultObject") or {}
+    except RuntimeError:
+        # Global search supports the zero header outside order entry. A future
+        # date is sufficient because pricing is deliberately not loaded here.
+        active = {}
+
+    delivery_date = active.get("DeliveryDate")
+    if not delivery_date:
+        delivery_date = (
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(days=1)
+        ).strftime("%Y-%m-%dT00:00:00Z")
+    return {
+        "BusinessUnitKey": int(config.get("biz_unit_key") or 3),
+        "OperationCompanyNumber": str(config.get("opco_number") or "795"),
+        "CustomerId": customer_id,
+        "DeliveryDate": delivery_date,
+        "OrderEntryHeaderId": active.get("OrderEntryHeaderId") or ZERO_UUID,
+    }
+
+
+def _product_matches_identifier(product, identifier):
+    expected = str(identifier).strip().upper()
+    values = {
+        str(product.get("ProductKey") or "").strip().upper(),
+        str(product.get("ProductNumber") or "").strip().upper(),
+        str(product.get("DisplayProductNumber") or "").strip().upper(),
+    }
+    for uom in product.get("UnitOfMeasureOrderQuantities") or []:
+        values.add(str(uom.get("ProductNumberDisplay") or "").strip().upper())
+        values.add(str(uom.get("OrignialProductNumber") or "").strip().upper())
+    return expected in values
+
+
+def _search_global_catalog(bearer, config, identifier, context):
+    """Return an exact orderable match from CustomerFirst's global catalog."""
+    response = pfg_call(
+        "POST",
+        "ProductCatalog/V1/SearchProductCatalog",
+        bearer,
+        {
+            **context,
+            "CurrentPageNumber": 0,
+            "PageSize": 25,
+            "QueryText": str(identifier),
+            "Skip": 0,
+            "LoadPricing": False,
+            "AdvanceFilter": DEFAULT_CATALOG_FILTER,
+        },
+        stage=f"global catalog lookup ({identifier})",
+    )
+    result = response.get("ResultObject") or {}
+    for value in result.get("CatalogProducts") or []:
+        product = value.get("Product", value)
+        if (
+            _product_matches_identifier(product, identifier)
+            and product.get("CanOrder") is not False
+            and not product.get("IsRemoved")
+        ):
+            return product
+    return None
+
+
 def resolve_order_items(bearer, config, items):
     """Resolve generated APNs to the full product/UOM records PFG requires."""
     products = _load_order_guide_products(bearer, config)
+    identifiers = [
+        str(item.get("productKey") or item.get("apn") or "").strip()
+        for item in items
+    ]
+    missing_from_guide = [
+        identifier for identifier in identifiers
+        if identifier and identifier not in products
+    ]
+    if missing_from_guide:
+        context = _catalog_search_context(bearer, config)
+        for identifier in dict.fromkeys(missing_from_guide):
+            product = _search_global_catalog(
+                bearer, config, identifier, context
+            )
+            if product:
+                products[identifier] = product
+
     resolved = []
     missing = []
     for item in items:
@@ -297,7 +403,7 @@ def resolve_order_items(bearer, config, items):
         resolved.append({"item": item, "product": product, "uom": uom})
     if missing:
         raise RuntimeError(
-            "PFG could not resolve current order-guide products: " + ", ".join(missing)
+            "PFG could not resolve current catalog products: " + ", ".join(missing)
         )
     return resolved
 
@@ -374,7 +480,7 @@ def place_pfg_order(bearer, config, items):
     """Full PFG order placement flow."""
     customer_id = config.get("customer_id", "ccbddeae-bc43-4287-a4e0-8d5bee2b913c")
     resolved_items = resolve_order_items(bearer, config, items)
-    order_id, delivery_date = get_or_create_order_header(bearer, customer_id)
+    order_id, delivery_date = create_order_header(bearer, customer_id)
     add_order_items(bearer, order_id, customer_id, resolved_items)
     confirmation = submit_order(bearer, order_id)
 

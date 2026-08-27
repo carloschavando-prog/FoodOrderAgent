@@ -12,7 +12,7 @@ from api import place_order_usfoods as usfoods
 VENDOR_NAMES = {1: "US Foods", 2: "PFG", 3: "Sysco"}
 
 
-def check_vendor(vendor_id):
+def check_vendor(vendor_id, items=None):
     """Authenticate and make, at most, a read-only availability request."""
     try:
         if vendor_id == 1:
@@ -20,7 +20,11 @@ def check_vendor(vendor_id):
             usfoods.get_delivery_date(bearer)
         elif vendor_id == 2:
             # A successful B2C exchange proves the server-held refresh chain.
-            pfg.authenticate_pfg()
+            bearer, config = pfg.authenticate_pfg()
+            if items:
+                # Resolve the complete reviewed basket before any draft exists.
+                # This catches off-guide catalog gaps without risking an order.
+                pfg.resolve_order_items(bearer, config, items)
         elif vendor_id == 3:
             bearer, shop_account_id, csrf_token, visitor_id = (
                 sysco.get_bearer_token(sysco.EMAIL, sysco.PASSWORD)
@@ -47,14 +51,22 @@ def check_vendor(vendor_id):
         }
 
 
-def check_vendors(vendor_ids):
+def check_vendors(vendor_ids, vendor_items=None):
     unique_ids = sorted({int(value) for value in vendor_ids})
     if not unique_ids or any(value not in VENDOR_NAMES for value in unique_ids):
         raise ValueError("Select at least one supported vendor")
+    vendor_items = vendor_items or {}
+
+    def check_selected_vendor(vendor_id):
+        items = vendor_items.get(str(vendor_id), vendor_items.get(vendor_id))
+        if items:
+            return check_vendor(vendor_id, items)
+        return check_vendor(vendor_id)
+
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=len(unique_ids)
     ) as executor:
-        results = list(executor.map(check_vendor, unique_ids))
+        results = list(executor.map(check_selected_vendor, unique_ids))
     return results
 
 
@@ -69,7 +81,9 @@ class handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) if length else b"{}")
-            results = check_vendors(body.get("vendorIds") or [])
+            results = check_vendors(
+                body.get("vendorIds") or [], body.get("vendorItems") or {}
+            )
             success = all(result["ready"] for result in results)
             payload = {
                 "success": success,

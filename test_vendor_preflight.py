@@ -27,13 +27,40 @@ class VendorPreflightTests(unittest.TestCase):
             "authenticate_pfg",
             return_value=("Bearer token", {}),
         ) as authenticate, mock.patch.object(
-            vendor_preflight.pfg, "get_or_create_order_header"
+            vendor_preflight.pfg, "create_order_header"
         ) as create:
             result = vendor_preflight.check_vendor(2)
 
         self.assertTrue(result["ready"])
         authenticate.assert_called_once_with()
         create.assert_not_called()
+
+    def test_pfg_preflight_resolves_reviewed_items_without_creating_an_order(self):
+        items = [{"apn": "RH414", "qty": 1, "uomType": "CS"}]
+        config = {"customer_id": "customer-1"}
+        with mock.patch.object(
+            vendor_preflight.pfg,
+            "authenticate_pfg",
+            return_value=("Bearer token", config),
+        ), mock.patch.object(
+            vendor_preflight.pfg, "resolve_order_items", return_value=[]
+        ) as resolve, mock.patch.object(
+            vendor_preflight.pfg, "create_order_header"
+        ) as create:
+            result = vendor_preflight.check_vendor(2, items)
+
+        self.assertTrue(result["ready"])
+        resolve.assert_called_once_with("Bearer token", config, items)
+        create.assert_not_called()
+
+    def test_vendor_items_are_routed_to_the_selected_preflight(self):
+        items = {"2": [{"apn": "RH414", "qty": 1}]}
+        with mock.patch.object(
+            vendor_preflight, "check_vendor", return_value={"ready": True}
+        ) as check:
+            vendor_preflight.check_vendors([2], items)
+
+        check.assert_called_once_with(2, items["2"])
 
 
 if __name__ == "__main__":

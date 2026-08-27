@@ -385,25 +385,97 @@ class PfgOrderSubmissionTests(unittest.TestCase):
         self.assertEqual("Bearer current", bearer)
         lease.commit.assert_called_once_with(credentials, verified=True)
 
-    def test_create_header_uses_current_customer_payload(self):
-        responses = [
-            {"IsSuccess": True, "ResultObject": {}},
-            {
-                "IsSuccess": True,
-                "ResultObject": {
-                    "OrderEntryHeaderId": "header-1",
-                    "DeliveryDate": "2026-08-07T00:00:00",
-                },
+    def test_create_header_uses_a_fresh_customer_order(self):
+        response = {
+            "IsSuccess": True,
+            "ResultObject": {
+                "OrderEntryHeaderId": "header-1",
+                "DeliveryDate": "2026-08-07T00:00:00",
             },
-        ]
-        with mock.patch.object(pfg, "pfg_call", side_effect=responses) as call:
-            result = pfg.get_or_create_order_header("Bearer token", "customer-1")
+        }
+        with mock.patch.object(pfg, "pfg_call", return_value=response) as call:
+            result = pfg.create_order_header("Bearer token", "customer-1")
 
         self.assertEqual(("header-1", "2026-08-07T00:00:00"), result)
         self.assertEqual(
             {"CustomerId": "customer-1", "PurchaseOrderNumber": ""},
-            call.call_args_list[1].args[3],
+            call.call_args.args[3],
         )
+        self.assertEqual(
+            "OrderEntryHeader/V1/CreateOrderEntryHeader",
+            call.call_args.args[1],
+        )
+
+    def test_resolver_falls_back_to_global_catalog_for_items_off_the_guide(self):
+        guide_product = {
+            "ProductKey": "guide-key",
+            "ProductNumber": "88802",
+            "CanOrder": True,
+            "UnitOfMeasureOrderQuantities": [
+                {"UnitOfMeasure": "CS", "CanOrderUom": True}
+            ],
+        }
+        global_product = {
+            "ProductKey": "catalog-key",
+            "ProductNumber": "RH414",
+            "CanOrder": True,
+            "IsRemoved": False,
+            "UnitOfMeasureOrderQuantities": [
+                {
+                    "UnitOfMeasure": "CS",
+                    "CanOrderUom": True,
+                    "ProductNumberDisplay": "RH414",
+                }
+            ],
+        }
+        items = [
+            {"apn": "88802", "qty": 16, "uomType": "CS"},
+            {"apn": "RH414", "qty": 1, "uomType": "CS"},
+        ]
+
+        with mock.patch.object(
+            pfg, "_load_order_guide_products", return_value={"88802": guide_product}
+        ), mock.patch.object(
+            pfg,
+            "_catalog_search_context",
+            return_value={"CustomerId": "customer-1"},
+        ), mock.patch.object(
+            pfg, "_search_global_catalog", return_value=global_product
+        ) as catalog_search:
+            resolved = pfg.resolve_order_items("Bearer token", {}, items)
+
+        self.assertEqual(["88802", "RH414"], [
+            row["product"]["ProductNumber"] for row in resolved
+        ])
+        catalog_search.assert_called_once_with(
+            "Bearer token", {}, "RH414", {"CustomerId": "customer-1"}
+        )
+
+    def test_global_catalog_requires_an_exact_orderable_match(self):
+        response = {
+            "IsSuccess": True,
+            "ResultObject": {
+                "CatalogProducts": [
+                    {
+                        "ProductKey": "wrong-key",
+                        "ProductNumber": "RH415",
+                        "CanOrder": True,
+                    },
+                    {
+                        "ProductKey": "right-key",
+                        "ProductNumber": "RH414",
+                        "CanOrder": True,
+                        "IsRemoved": False,
+                    },
+                ]
+            },
+        }
+        with mock.patch.object(pfg, "pfg_call", return_value=response):
+            product = pfg._search_global_catalog(
+                "Bearer token", {}, "RH414", {"CustomerId": "customer-1"}
+            )
+
+        self.assertEqual("right-key", product["ProductKey"])
 
     def test_item_update_uses_current_product_contract(self):
         resolved = [{

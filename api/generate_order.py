@@ -1569,10 +1569,14 @@ function getPreflightEndpoint(){
   return new URL('/api/vendor_preflight', document.baseURI).href;
 }
 async function preflightVendors(vendorIds){
+  var vendorItems={};
+  vendorIds.forEach(function(vid){
+    vendorItems[vid]=ORDER_DATA[vid]||[];
+  });
   var resp=await fetch(getPreflightEndpoint(),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({vendorIds:vendorIds})
+    body:JSON.stringify({vendorIds:vendorIds,vendorItems:vendorItems})
   });
   var data=await resp.json();
   if(!resp.ok) throw new Error(data.error||'Vendor sign-on check failed');
@@ -1701,7 +1705,10 @@ async function submitOrders(vendorIds){
       var resp=await fetch(getOrderEndpoint(vid),{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({items:items})
+        body:JSON.stringify({
+          orderId:ORDER_FEEDBACK_CONTEXT.order_id,
+          items:items
+        })
       });
       var data=await resp.json();
       if(data.success){
