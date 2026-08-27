@@ -1598,10 +1598,41 @@ async function syncAfterGeneratedOrder(){
 async function generateOrder(){
   const btn = document.getElementById('generateBtn');
 
+  // Open the review tab while this function is still handling the user's
+  // click. Chrome blocks windows opened after the inventory/price awaits.
+  const targetName=`weekly-order-${Date.now()}`;
+  const reportWindow=window.open('',targetName);
+  if(!reportWindow){
+    showToast('Chrome blocked the order review tab. Allow pop-ups for FoodOrder, then try again.',true,8000);
+    return;
+  }
+  let reportSubmitted=false;
+  const closePendingReportWindow=()=>{
+    if(reportSubmitted) return;
+    try{
+      if(!reportWindow.closed) reportWindow.close();
+    }catch(_error){}
+  };
+  try{
+    reportWindow.document.open();
+    reportWindow.document.write(
+      '<!doctype html><html><head><meta charset="utf-8">'
+      +'<meta name="viewport" content="width=device-width,initial-scale=1">'
+      +'<title>Preparing Weekly Food Order</title></head>'
+      +'<body style="margin:0;background:#f4f1e8;color:#073f49;font:16px system-ui,sans-serif">'
+      +'<main style="max-width:680px;margin:15vh auto;padding:32px">'
+      +'<h1 style="margin:0 0 12px">Preparing weekly order…</h1>'
+      +'<p style="line-height:1.5">Checking inventory, prices, parties, and vendor sign-ons.</p>'
+      +'</main></body></html>'
+    );
+    reportWindow.document.close();
+  }catch(_error){}
+
   btn.innerHTML = '<span class="spin"></span> Checking inventory…';
   btn.setAttribute('disabled','');
   const inventoryIsCurrent=await verifyLatestSharedInventory();
   if(!inventoryIsCurrent){
+    closePendingReportWindow();
     btn.innerHTML = '🚀 Generate Order';
     updateStats();
     return;
@@ -1610,6 +1641,7 @@ async function generateOrder(){
   btn.innerHTML = '<span class="spin"></span> Refreshing Item Master prices…';
   const pricingResult=await syncInventoryPrices({beforeOrder:true});
   if(!pricingResult){
+    closePendingReportWindow();
     showToast('Order blocked: current Item Master prices could not be loaded.',true,9000);
     btn.innerHTML = '🚀 Generate Order';
     updateStats();
@@ -1619,6 +1651,7 @@ async function generateOrder(){
   btn.innerHTML = '<span class="spin"></span> Refreshing parties…';
   const refreshedParty=await refreshPartyDemand({beforeOrder:true});
   if(!refreshedParty){
+    closePendingReportWindow();
     btn.innerHTML = '🚀 Generate Order';
     updateStats();
     return;
@@ -1626,6 +1659,7 @@ async function generateOrder(){
   const partyBlocks=refreshedParty.blocking_warnings || [];
   const overrideReady=partyBlocks.length>0 && partyOverrideEnabled && partyOverrideReason.trim() && refreshedParty.id!==null && refreshedParty.id!==undefined;
   if(partyBlocks.length && !overrideReady){
+    closePendingReportWindow();
     showToast('Order blocked: review Party Demand warnings or enter a manager emergency override reason.',true,9000);
     btn.innerHTML = '🚀 Generate Order';
     updateStats();
@@ -1636,6 +1670,7 @@ async function generateOrder(){
   try{
     orderOverrides=parseManualOrderOverrides();
   }catch(error){
+    closePendingReportWindow();
     showToast('Order blocked: '+error.message,true,9000);
     btn.innerHTML = '🚀 Generate Order';
     updateStats();
@@ -1668,9 +1703,6 @@ async function generateOrder(){
       },
       orderOverrides,
     };
-    const targetName=`weekly-order-${Date.now()}`;
-    const reportWindow=window.open('',targetName);
-    if(!reportWindow) throw new Error('Allow pop-ups for FoodOrder, then try again.');
     const form=document.createElement('form');
     form.method='POST';
     form.action='/api/generate_order';
@@ -1683,11 +1715,13 @@ async function generateOrder(){
     form.appendChild(input);
     document.body.appendChild(form);
     form.submit();
+    reportSubmitted=true;
     form.remove();
     showToast('✅ Weekly order is generating in a review tab.');
     await new Promise(resolve=>setTimeout(resolve,1800));
     await syncAfterGeneratedOrder();
   } catch(e) {
+    closePendingReportWindow();
     showToast('❌ Request failed: ' + e.message, true, 8000);
   }
 

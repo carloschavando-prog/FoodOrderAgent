@@ -12,6 +12,18 @@ class OrderReportOriginTests(unittest.TestCase):
         self.assertNotIn("URL.createObjectURL", source)
         self.assertNotIn("new Blob([reportHtml]", source)
 
+    def test_report_tab_opens_before_async_checks_so_chrome_allows_it(self):
+        source = pathlib.Path("index.html").read_text()
+        start = source.index("async function generateOrder(){")
+        end = source.index("// ── Init", start)
+        generate_source = source[start:end]
+
+        self.assertLess(
+            generate_source.index("window.open('',targetName)"),
+            generate_source.index("await verifyLatestSharedInventory()"),
+        )
+        self.assertIn("closePendingReportWindow();", generate_source)
+
     def test_server_accepts_form_encoded_generation_payload(self):
         source = pathlib.Path("api/generate_order.py").read_text()
 
