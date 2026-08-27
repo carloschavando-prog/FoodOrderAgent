@@ -1,7 +1,7 @@
 """
 On Par Item Master — Cross-Vendor Coverage Report
 ===================================================
-Queries Supabase items + latest pricing APNs for all 4 vendors,
+Queries Supabase items + latest pricing APNs for all active vendors,
 deduplicates the items table (each item appears twice — use lower id),
 assigns On Par Product IDs (OP-XXX), and writes item_master.html.
 
@@ -15,6 +15,8 @@ Outputs:
 
 import json, os, urllib.request, urllib.parse, webbrowser, datetime
 
+from delivery_pars import REMOVED_ITEM_NAMES
+
 SB_URL = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
 SB_HDRS = {
@@ -23,8 +25,9 @@ SB_HDRS = {
     "Accept":        "application/json",
 }
 
-VENDOR_IDS   = [1, 2, 3, 4]
-VENDOR_NAMES = {1: "US Foods", 2: "PFG", 3: "Sysco", 4: "GFS"}
+# GFS (vendor 4) remains archived in Supabase and its integration files.
+VENDOR_IDS   = [1, 2, 3]
+VENDOR_NAMES = {1: "US Foods", 2: "PFG", 3: "Sysco"}
 OUTPUT_FILE  = os.path.join(os.path.dirname(__file__), "item_master.html")
 
 # Category display order + short code for OP IDs
@@ -41,6 +44,14 @@ CATEGORIES = [
 ]
 CAT_CODE = {cat_id: code for cat_id, _, code in CATEGORIES}
 CAT_NAME = {cat_id: name for cat_id, name, _ in CATEGORIES}
+SORT_NAME_OVERRIDES_BY_NAME = {
+    "16 oz to-go cold cups": "strax 16 oz to-go cold cups",
+    "vanilla monin": "daily's sweet & sour mix z vanilla monin",
+}
+MANUAL_VENDOR_APNS_BY_ITEM = {
+    "mozzarella sticks": {1: "7332687"},
+    "vanilla monin": {1: "8231367"},
+}
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
 
@@ -71,6 +82,8 @@ def load_data():
     id_to_item  = {}
     for row in raw_items:
         key = row["name"].lower().strip()
+        if key in REMOVED_ITEM_NAMES:
+            continue
         name_groups[key].append(row["id"])
         id_to_item[row["id"]] = row
 
@@ -87,7 +100,15 @@ def load_data():
         })
 
     # Sort by category, then name
-    canonical_items.sort(key=lambda x: (x["category_id"] or 99, x["name"].lower()))
+    canonical_items.sort(
+        key=lambda x: (
+            x["category_id"] or 99,
+            SORT_NAME_OVERRIDES_BY_NAME.get(
+                x["name"].lower().strip(),
+                x["name"],
+            ).lower(),
+        )
+    )
     print(f"  {len(canonical_items)} unique items after deduplication")
 
     # Build reverse map: any item_id → canonical_id
@@ -108,7 +129,7 @@ def load_data():
         vn = VENDOR_NAMES.get(vid, str(vid))
         print(f"  {vn}: latest season = {latest_season_per_vendor.get(vid, 'none')}")
 
-    # 3. Load ALL pricing rows for our 4 vendors.
+    # 3. Load ALL pricing rows for active vendors.
     #    For each (canonical_item_id, vendor_id) pair, keep the APN from the
     #    highest (most recent) price_list_id so CI's old runs don't overwrite fresh ones.
     print("→ Loading pricing APNs (all seasons, best per item×vendor)...")
@@ -127,6 +148,12 @@ def load_data():
         iid   = row["item_id"]
         can_id = id_to_canonical.get(iid, iid)
         vendor_apns[can_id][vid] = apn   # higher pl_id overwrites older
+
+    for item in canonical_items:
+        manual_apns = MANUAL_VENDOR_APNS_BY_ITEM.get(
+            item["name"].lower().strip(), {}
+        )
+        vendor_apns[item["canonical_id"]].update(manual_apns)
 
     matched_counts = {vid: 0 for vid in VENDOR_IDS}
     for can_id, vendors in vendor_apns.items():
@@ -272,7 +299,6 @@ def pill(apn, vendor_id):
 def build_html(canonical_items, vendor_apns):
     now = datetime.datetime.now().strftime("%B %d, %Y at %I:%M %p")
     total = len(canonical_items)
-    cov4 = sum(1 for ci in canonical_items if len(vendor_apns.get(ci["canonical_id"], {})) == 4)
     cov3 = sum(1 for ci in canonical_items if len(vendor_apns.get(ci["canonical_id"], {})) == 3)
     cov2 = sum(1 for ci in canonical_items if len(vendor_apns.get(ci["canonical_id"], {})) == 2)
     cov1 = sum(1 for ci in canonical_items if len(vendor_apns.get(ci["canonical_id"], {})) == 1)
@@ -288,8 +314,7 @@ def build_html(canonical_items, vendor_apns):
     <div class="subtitle">Cross-Vendor Coverage · Generated {now}</div>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="swatch sw4"></div>All 4 vendors ({cov4})</div>
-    <div class="legend-item"><div class="swatch sw3"></div>3 vendors ({cov3})</div>
+    <div class="legend-item"><div class="swatch sw3"></div>All 3 active vendors ({cov3})</div>
     <div class="legend-item"><div class="swatch sw2"></div>2 vendors ({cov2})</div>
     <div class="legend-item"><div class="swatch sw1"></div>1 vendor ({cov1})</div>
     <div class="legend-item"><div class="swatch sw0"></div>No match ({cov0})</div>
@@ -300,7 +325,6 @@ def build_html(canonical_items, vendor_apns):
   <div><span>US Foods: </span><strong>{sum(1 for ci in canonical_items if 1 in vendor_apns.get(ci["canonical_id"], {}))}</strong></div>
   <div><span>PFG: </span><strong>{sum(1 for ci in canonical_items if 2 in vendor_apns.get(ci["canonical_id"], {}))}</strong></div>
   <div><span>Sysco: </span><strong>{sum(1 for ci in canonical_items if 3 in vendor_apns.get(ci["canonical_id"], {}))}</strong></div>
-  <div><span>GFS: </span><strong>{sum(1 for ci in canonical_items if 4 in vendor_apns.get(ci["canonical_id"], {}))}</strong></div>
 </div>
 """)
 
@@ -312,7 +336,6 @@ def build_html(canonical_items, vendor_apns):
   <th class="vnd-col usf">US Foods</th>
   <th class="vnd-col pfg">PFG</th>
   <th class="vnd-col syc">Sysco</th>
-  <th class="vnd-col gfs">GFS</th>
 </tr></thead>
 <tbody>""")
 
@@ -322,7 +345,7 @@ def build_html(canonical_items, vendor_apns):
         if cat_id != current_cat:
             current_cat = cat_id
             cat_name = CAT_NAME.get(cat_id, f"Category {cat_id}")
-            parts.append(f'<tr class="cat-row"><td colspan="6">{cat_name}</td></tr>\n')
+            parts.append(f'<tr class="cat-row"><td colspan="{2 + len(VENDOR_IDS)}">{cat_name}</td></tr>\n')
 
         can_id  = item["canonical_id"]
         apns    = vendor_apns.get(can_id, {})
@@ -332,7 +355,7 @@ def build_html(canonical_items, vendor_apns):
         name    = item["name"]
 
         cells = []
-        for vid in [1, 2, 3, 4]:
+        for vid in VENDOR_IDS:
             apn = apns.get(vid, "")
             if apn:
                 cells.append(f'<td class="apn">{pill(apn, vid)}</td>')
@@ -371,23 +394,25 @@ def main():
 
     # Print summary table to console
     print("\n── Coverage Summary ───────────────────────────────")
-    from collections import defaultdict
-    cat_stats = defaultdict(lambda: [0,0,0,0,0])  # cat_id → [cov4,cov3,cov2,cov1,cov0]
-    for item in canonical_items:
-        n = len(vendor_apns.get(item["canonical_id"], {}))
-        idx = 4 - n if n <= 4 else 0
-        cat_stats[item["category_id"]][4-n if n<=4 else 4] += 1
-
-    print(f"{'Category':<20} {'Total':>5} {'4-vend':>6} {'3-vend':>6} {'2-vend':>6} {'1-vend':>6} {'none':>5}")
+    coverage_levels = list(range(len(VENDOR_IDS), -1, -1))
+    coverage_headers = " ".join(
+        f"{('none' if level == 0 else str(level) + '-vend'):>6}"
+        for level in coverage_levels
+    )
+    print(f"{'Category':<20} {'Total':>5} {coverage_headers}")
     print("─" * 60)
-    totals = [0,0,0,0,0]
+    totals = [0 for _ in coverage_levels]
     for cat_id, cat_name, _ in CATEGORIES:
         items_in_cat = [ci for ci in canonical_items if ci["category_id"] == cat_id]
-        counts = [0,0,0,0,0]
-        for item in items_in_cat:
-            n = len(vendor_apns.get(item["canonical_id"], {}))
-            counts[4-n if 0<=4-n<5 else 4] += 1
-        for i in range(5): totals[i] += counts[i]
+        counts = [
+            sum(
+                len(vendor_apns.get(item["canonical_id"], {})) == level
+                for item in items_in_cat
+            )
+            for level in coverage_levels
+        ]
+        for i in range(len(coverage_levels)):
+            totals[i] += counts[i]
         row = f"{cat_name:<20} {len(items_in_cat):>5}"
         for c in counts:
             row += f" {c:>6}" if c else f"{'':>6}"

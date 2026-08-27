@@ -1,0 +1,24 @@
+{
+  "archived_at": "2026-08-27",
+  "supabase_project": "FoodOrderAgent",
+  "vendor": {
+    "id": 4,
+    "name": "GFS",
+    "contact": "Mark Lasson",
+    "phone": "937-815-6861",
+    "minimum_order": "$750 min"
+  },
+  "preserved_record_counts": {
+    "price_lists": 26,
+    "pricing": 423,
+    "preferred_items": 8,
+    "item_vendor_status": 0,
+    "basket_items": 0,
+    "food_order_lines": 24,
+    "food_order_decisions_supplier": 120,
+    "food_order_decisions_selected": 92,
+    "order_feedback_sends": 0,
+    "vendor_auth_rows": 1
+  },
+  "database_rows_deleted": 0
+}

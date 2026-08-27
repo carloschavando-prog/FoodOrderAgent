@@ -41,7 +41,7 @@ class TruckParTests(unittest.TestCase):
             },
             {
                 "id": 125,
-                "name": "Milwaukee Pretzel",
+                "name": "24 Ounce Pretzel",
                 "category_id": 7,
                 "pack_size": "8/24 OZ",
                 "par_level": 20,
@@ -119,6 +119,22 @@ class TruckParTests(unittest.TestCase):
                 "par_level": 10,
                 "preferred_vendor_id": None,
             },
+            {
+                "id": 239,
+                "name": "Mozzarella Sticks",
+                "category_id": 7,
+                "pack_size": "",
+                "par_level": 6,
+                "preferred_vendor_id": 1,
+            },
+            {
+                "id": 240,
+                "name": "Vanilla Monin",
+                "category_id": 9,
+                "pack_size": "",
+                "par_level": 4,
+                "preferred_vendor_id": 1,
+            },
         ]
 
     def load_items(self, truck_cycle):
@@ -145,9 +161,9 @@ class TruckParTests(unittest.TestCase):
             "burger patties": 3,
             "double lobe chicken breasts": 3,
             "potato hamburger bun": 2,
-            "fries": 10,
+            "fries": 20,
             "flatbread dough": 5,
-            "milwaukee pretzel": 7,
+            "24 ounce pretzel": 7,
             "pizza cheese": 5,
             "tenders": 8,
         }
@@ -161,9 +177,9 @@ class TruckParTests(unittest.TestCase):
             "burger patties": 5,
             "double lobe chicken breasts": 4,
             "potato hamburger bun": 3,
-            "fries": 13,
+            "fries": 26,
             "flatbread dough": 6,
-            "milwaukee pretzel": 12,
+            "24 ounce pretzel": 12,
             "pizza cheese": 10,
             "tenders": 12,
         }
@@ -193,27 +209,23 @@ class TruckParTests(unittest.TestCase):
         self.assertEqual(self.load_items("tuesday")["ope sauce"]["par_level"], 6)
         self.assertEqual(self.load_items("friday")["ope sauce"]["par_level"], 9)
 
-    def test_simple_syrup_builds_to_ten_gallons_on_both_trucks(self):
+    def test_removed_simple_syrup_row_is_ignored(self):
         for cycle in ("tuesday", "friday"):
-            syrup = self.load_items(cycle)["simple syrup"]
-            self.assertEqual(syrup["par_level"], 10)
-            self.assertEqual(syrup["order_qty"], 10)
-            self.assertEqual(syrup["count_unit"], "gallon")
+            self.assertNotIn("simple syrup", self.load_items(cycle))
 
-    def test_simple_syrup_is_never_assigned_to_a_broadliner(self):
-        syrup = self.load_items("friday")["simple syrup"]
-        stale_vendor_price = {
-            "price": 1.0,
-            "unit_quantity": 1280,
-            "unit_basis": "oz",
-            "units_per_case": 10,
-        }
+    def test_mozzarella_sticks_build_to_six_cases(self):
+        for cycle in ("tuesday", "friday"):
+            mozzarella = self.load_items(cycle)["mozzarella sticks"]
+            self.assertEqual(mozzarella["par_level"], 6)
+            self.assertEqual(mozzarella["order_qty"], 6)
+            self.assertEqual(mozzarella["count_unit"], "case")
 
-        assignment = generate_order.assign_cheapest(
-            [syrup], {syrup["id"]: {1: stale_vendor_price}}, {1}
-        )
-
-        self.assertEqual(assignment, {})
+    def test_vanilla_monin_builds_to_four_bottles(self):
+        for cycle in ("tuesday", "friday"):
+            vanilla = self.load_items(cycle)["vanilla monin"]
+            self.assertEqual(vanilla["par_level"], 4)
+            self.assertEqual(vanilla["order_qty"], 4)
+            self.assertEqual(vanilla["count_unit"], "bottle")
 
 
 if __name__ == "__main__":

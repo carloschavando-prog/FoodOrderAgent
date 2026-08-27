@@ -53,6 +53,7 @@
       color:var(--accent);font-size:12px;font-weight:700;
       cursor:pointer;display:inline-flex;align-items:center;gap:6px;
       transition:background .15s,color .15s,border-color .15s;white-space:nowrap;
+      text-decoration:none;
     }
     .btn:hover{background:var(--teal-soft);border-color:var(--accent)}
     .btn-primary,.btn-success{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -94,6 +95,7 @@
     .pill-muted{background:rgba(255,255,255,.7);color:var(--muted);border:1px solid #bdd4d6}
     .cycle-pill{background:#fff;color:var(--accent);border:1px solid #8fb8bd}
     .cycle-pill.friday{background:var(--yellow-soft);color:#765f09;border-color:#dec653}
+    .cycle-select{border:1px solid #8fb8bd;border-radius:999px;background:#fff;color:var(--accent);font:700 11px inherit;padding:4px 24px 4px 9px}
     .vendor-pills{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 
     /* ── Layout ── */
@@ -168,7 +170,7 @@
       padding:3px 7px;border-radius:999px;white-space:nowrap;flex-shrink:0;
       border:1px solid #bed3d4;
     }
-    .card-fields{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end}
+    .card-fields{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;align-items:end}
     .field{display:flex;flex-direction:column;gap:3px}
     .field-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0;color:#65797d}
     .field-static{
@@ -191,6 +193,37 @@
     .field input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     .field input[type=number]:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(7,63,73,.12)}
     .item-card.needs-order .field input[type=number]{border-color:#c4aa35}
+    /* ── Party demand ── */
+    .party-demand{background:var(--surface);border:1px solid #9fc9cf;border-radius:10px;box-shadow:var(--shadow);margin-bottom:24px;overflow:hidden;scroll-margin-top:130px}
+    .party-demand-head{background:var(--accent);color:#fff;padding:15px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+    .party-demand-head h2{font:500 20px Georgia,"Times New Roman",serif;margin-bottom:4px}
+    .party-demand-head p{font-size:12px;line-height:1.45;opacity:.85}
+    .party-demand-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .party-demand-actions .btn{background:#fff;border-color:#fff}
+    .party-status{font-size:11px;font-weight:800;border:1px solid rgba(255,255,255,.45);border-radius:999px;padding:5px 9px;white-space:nowrap}
+    .party-demand-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+    .party-meta-cell{background:var(--surface2);padding:10px 14px}
+    .party-meta-cell span{display:block;color:#496469;font-size:9px;font-weight:700;text-transform:uppercase;margin-bottom:3px}
+    .party-meta-cell strong{font-size:12px}
+    .party-table-wrap{overflow-x:auto}
+    .party-table{width:100%;border-collapse:collapse;font-size:12px}
+    .party-table th{background:#f3f7f7;color:#496469;font-size:9px;text-transform:uppercase;text-align:left;padding:8px 12px;white-space:nowrap}
+    .party-table td{padding:9px 12px;border-top:1px solid #e1e8e7;vertical-align:top}
+    .party-table td.num,.party-table th.num{text-align:right;white-space:nowrap}
+    .party-mapping-note{display:block;color:var(--muted);font-size:10px;margin-top:2px;max-width:420px}
+    .party-empty{padding:20px;color:var(--muted);font-size:13px;text-align:center}
+    .party-warning-box{padding:11px 15px;background:var(--red-bg);color:#742f24;border-top:1px solid #dbb3aa;font-size:12px;line-height:1.45}
+    .party-warning-box ul{padding-left:18px;margin-top:5px}
+    .party-override{padding:11px 15px;background:#fff7d6;border-top:1px solid #dec653;display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:12px}
+    .party-override input[type=text]{grid-column:2;width:100%;border:1px solid #c7aa35;border-radius:6px;padding:7px 9px;font:inherit}
+    .party-events{border-top:1px solid var(--border);padding:9px 14px;font-size:12px}
+    .party-events summary{cursor:pointer;font-weight:700;color:var(--accent)}
+    .party-events ul{padding:8px 0 0 18px;color:var(--muted);line-height:1.55}
+    .manual-overrides{background:#fff7d6;border:1px solid #dec653;border-radius:10px;box-shadow:var(--shadow);margin:-10px 0 24px;padding:14px 16px;scroll-margin-top:130px}
+    .manual-overrides h2{font:600 18px Georgia,"Times New Roman",serif;color:#5c4b0a;margin-bottom:4px}
+    .manual-overrides p{font-size:11px;color:#6e5a0e;line-height:1.45;margin-bottom:9px}
+    .manual-overrides textarea{display:block;width:100%;min-height:150px;resize:vertical;border:1px solid #c7aa35;border-radius:7px;background:#fff;padding:9px 10px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text)}
+    .manual-overrides textarea:focus{outline:none;border-color:#967b10;box-shadow:0 0 0 2px rgba(199,170,53,.2)}
     /* ── Vendor panel ── */
     .overlay{display:none;position:fixed;inset:0;background:rgba(22,43,48,.42);z-index:100}
     .overlay.open{display:block}
@@ -225,7 +258,7 @@
 
     /* ── Print ── */
     @media print{
-      .app-header .header-actions,.stats-bar .vendor-pills,.sidebar,.overlay,.vendor-panel{display:none!important}
+      .app-header .header-actions,.stats-bar .vendor-pills,.sidebar,.overlay,.vendor-panel,.party-demand-actions,.party-override,.manual-overrides{display:none!important}
       .app-header{position:relative;height:auto;padding:12px 20px}
       .stats-bar{position:relative;top:auto}
       .layout{display:block}
@@ -242,6 +275,7 @@
       .order-qty.zero{color:#090}
       .field input[type=number]{background:#f5f5f5;border-color:#ccc;color:#111}
       .cat-title{color:#444;border-color:#ccc}
+      .party-demand{box-shadow:none;border-color:#777;break-inside:avoid}.party-demand-head{background:#eee;color:#111}.party-demand-head p{opacity:1}.party-table th{color:#444}
     }
 
     @media (max-width:1100px){
@@ -267,6 +301,7 @@
       .sidebar-item{flex:0 0 auto;margin:0;padding:8px 10px}
       .content{padding:14px 12px}
       .items-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+      .party-demand-head{flex-direction:column}.party-demand-actions{width:100%;justify-content:space-between}.party-demand-meta{grid-template-columns:1fr}
       .vendor-panel{width:min(100vw,430px)}
     }
 
@@ -274,6 +309,7 @@
       .app-header h1{align-items:flex-start;flex-direction:column;gap:2px}
       .brand-kicker{font-size:8px}
       .items-grid{grid-template-columns:1fr}
+      .card-fields{grid-template-columns:repeat(2,1fr)}
       .toast{left:12px;right:12px;bottom:12px}
     }
   </style>
@@ -292,6 +328,9 @@
     <button class="btn btn-danger" onclick="resetAll()">↺ Reset</button>
     <button class="btn btn-success" id="saveSharedBtn" onclick="saveSharedSnapshot()">💾 Save Count</button>
     <button class="btn" id="loadSharedBtn" onclick="loadSharedSnapshot({force:true})">↧ Load Saved</button>
+    <button class="btn" id="refreshPartyBtn" onclick="refreshPartyDemand({force:true})">↻ Refresh Parties</button>
+    <button class="btn" id="syncPricesBtn" onclick="syncInventoryPrices({force:true})">↻ Sync Prices</button>
+    <a class="btn" id="inventoryPricingBtn" href="/api/item_master" target="_blank" rel="noopener">💲 Inventory Pricing</a>
     <button class="btn" onclick="togglePanel()">📋 By Vendor</button>
     <button class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
     <button class="btn btn-success" id="generateBtn" onclick="generateOrder()" disabled title="Fill in all on-hand counts to enable">🚀 Generate Order</button>
@@ -299,10 +338,12 @@
 </header>
 
 <div class="stats-bar">
-  <div class="stat"><span class="stat-label">Order Cycle</span><span class="pill cycle-pill" id="cycleStatus"></span></div>
+  <div class="stat"><span class="stat-label">Order Cycle</span><span class="pill cycle-pill" id="cycleStatus"></span><select class="cycle-select" id="cycleSelect" onchange="setDeliveryCycle(this.value)" aria-label="Delivery cycle"><option value="tuesday">Tuesday delivery</option><option value="friday">Friday delivery</option></select></div>
   <div class="stat"><span class="stat-label">Need to Order</span><span class="stat-value red" id="needCount">–</span></div>
   <div class="stat"><span class="stat-label">Stocked</span><span class="stat-value green" id="stockedCount">–</span></div>
   <div class="stat"><span class="stat-label">Not Counted</span><span class="stat-value" id="uncountedCount">–</span></div>
+  <div class="stat"><span class="stat-label">Inventory Value</span><span class="stat-value green" id="inventoryValue">Syncing…</span></div>
+  <div class="stat"><span class="stat-label">Item Master Prices</span><span class="stat-value" id="priceStatus">Checking…</span></div>
   <div class="stat"><span class="stat-label">Shared Save</span><span class="stat-value" id="saveStatus">Checking…</span></div>
   <div class="vendor-pills" id="vendorPills"></div>
 </div>
@@ -323,6 +364,7 @@
 </div>
 
 <script>
+const FRY_PAR_MULTIPLIER=2;
 const CATEGORIES = [
   {
     id:"paper", name:"Paper Goods", icon:"📋",
@@ -353,13 +395,13 @@ const CATEGORIES = [
     id:"tortillas", name:"Tortilla Shelf", icon:"🫓",
     items:[
       {id:17, name:'Tortilla, Flour 12"',        buildTo:7,  tuesdayBuildTo:5, fridayBuildTo:7, vendor:"US FOODS", price:29.53, unit:"8/12", countUnit:"12-count pack"},
-      {id:18, name:'Tortilla, Flour 6"',         buildTo:null,eventDriven:true, vendor:"US FOODS", price:30.66, unit:"12/24"},
+      {id:18, name:'Tortilla, Flour 6"',         buildTo:null,eventDriven:true, vendor:"US FOODS", price:30.66, unit:"12/24", countUnit:"pack"},
     ]
   },
   {
     id:"drystock", name:"Dry Stock", icon:"🏪",
     items:[
-      {id:19, name:"Garlic Parmesan",            buildTo:9,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL",    countUnit:"gallon"},
+      {id:19, name:"Garlic Parmesan",            buildTo:2,  vendor:"PFG",        price:46.15,  unit:"2/1 GAL",    countUnit:"gallon"},
       {id:20, name:"Yellow Mustard",             buildTo:3,  tuesdayBuildTo:2, fridayBuildTo:3, vendor:"PFG", price:18.20, unit:"4/1 GAL", countUnit:"gallon"},
       {id:24, name:"Ketchup Packets",            buildTo:3,  vendor:"PFG",        price:23.25,  unit:"1000/9G",    countUnit:"case"},
       {id:25, name:"Mustard Packets",            buildTo:3,  vendor:"PFG",        price:15.00,  unit:"500/7G",     countUnit:"case"},
@@ -371,65 +413,65 @@ const CATEGORIES = [
       {id:34, name:"Pizza Sauce",                buildTo:6,  vendor:"PFG",        price:42.88,  unit:"6/#10",      countUnit:"#10 can"},
       {id:37, name:"Bulk Sugar",                 buildTo:1,  vendor:"US FOODS",   price:35.53,  unit:"8/5 LB",     countUnit:"5-pound bag"},
       {id:38, name:"BBQ Sauce",                  buildTo:4,  vendor:"PFG",        price:58.39,  unit:"4/1 GAL",    countUnit:"gallon"},
-      {id:41, name:"Maraschino Cherries",        buildTo:3,  eventOrderQty:6,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:88.04, unit:"6/½ GAL", countUnit:"1/2-gallon jar"},
-      {id:42, name:"Cholula",                    buildTo:1,  vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ",    countUnit:"each"},
+      {id:41, name:"Maraschino Cherries",        buildTo:2,  vendor:"US FOODS", price:88.04, unit:"6/½ GAL", countUnit:"case"},
+      {id:42, name:"Cholula",                    buildTo:12, vendor:"US FOODS",   price:79.03,  unit:"24/5 OZ",    countUnit:"each"},
       {id:44, name:"Crushed Red Pepper Packets", buildTo:2,  vendor:"PFG",        price:7.28,   unit:"200/1G",     countUnit:"case"},
       {id:46, name:"Premium Buttery Pan & Grill",buildTo:3,  vendor:"US FOODS",   price:70.71,  unit:"6/1 GAL",    countUnit:"gallon"},
-      {id:47, name:"Fire Roasted Salsa",         buildTo:null,eventDriven:true, eventOrderQty:8,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:53.28, unit:"4/68 OZ", countUnit:"each"},
-      {id:50, name:"Black Beans",                buildTo:null,eventDriven:true, eventOrderQty:13,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"GFS", price:30.91, unit:"6/#10 CAN", countUnit:"#10 can"},
-      {id:51, name:"Shortening",                 buildTo:15, vendor:"US FOODS",   price:31.03,  unit:"35 LB",      countUnit:"case"},
+      {id:47, name:"Fire Roasted Salsa",         buildTo:null,eventDriven:true, vendor:"US FOODS", price:53.28, unit:"4/68 OZ", countUnit:"68-ounce container"},
+      {id:50, name:"Black Beans",                buildTo:null,eventDriven:true, vendor:"GFS", price:30.91, unit:"6/#10 CAN", countUnit:"#10 can"},
+      {id:51, name:"Shortening",                 buildTo:8,  vendor:"US FOODS",   price:31.03,  unit:"35 LB",      countUnit:"case"},
       {id:52, name:"Croutons",                   buildTo:3,  vendor:"US FOODS",   price:33.28,  unit:"4/2.5 LB",   countUnit:"bag"},
     ]
   },
   {
     id:"disposables", name:"Disposables", icon:"🥡",
     items:[
-      {id:54, name:"Styrofoam To-Go Containers", buildTo:4,  vendor:"I SUPPLY",   price:23.99,  unit:"200",       countUnit:"case"},
-      {id:55, name:"Can Liners",                 buildTo:6,  vendor:"I SUPPLY",   price:24.99,  unit:"5 Rolls",   countUnit:"case"},
+      {id:55, name:"Can Liners",                 buildTo:3,  vendor:"I SUPPLY",   price:24.99,  unit:"5 Rolls",   countUnit:"case"},
       {id:56, name:"Deli Paper",                 buildTo:3,  vendor:"US FOODS",   price:83.09,  unit:"12/500",    countUnit:"box"},
-      {id:57, name:"Straws",                     buildTo:2,  vendor:"I SUPPLY",   price:17.99,  unit:"4/500",     countUnit:"box"},
+      {id:57, name:"Straws",                     buildTo:6,  vendor:"I SUPPLY",   price:17.99,  unit:"4/500",     countUnit:"box"},
+      {id:238,name:"16 oz To-Go Cold Cups",      buildTo:2,  vendor:"SYSCO",      price:55.28,  unit:"12/70 CT",  countUnit:"case"},
+      {id:54, name:"Styrofoam To-Go Containers", buildTo:4,  vendor:"I SUPPLY",   price:23.99,  unit:"200",       countUnit:"case"},
       {id:58, name:"2 oz To-Go Cups",            buildTo:2,  vendor:"I SUPPLY",   price:29.50,  unit:"2500",      countUnit:"case"},
       {id:63, name:"2 oz Lids",                  buildTo:2,  vendor:"I SUPPLY",   price:26.99,  unit:"2500",      countUnit:"case"},
       {id:64, name:"Foil Sheets",                buildTo:2,  vendor:"I SUPPLY",   price:null,   unit:"6/500",     countUnit:"box"},
       {id:65, name:"Cutlery Kits",               buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:"250",       countUnit:"case"},
       {id:66, name:"Savaday",                    buildTo:2,  vendor:"US FOODS",   price:110.99, unit:"2/250",     countUnit:"case"},
-      {id:67, name:"Napkins C Fold",             buildTo:7,  vendor:"I SUPPLY",   price:33.50,  unit:"24 Packs",  countUnit:"case"},
+      {id:67, name:"Napkins C Fold",             buildTo:3,  vendor:"I SUPPLY",   price:33.50,  unit:"24 Packs",  countUnit:"case"},
       {id:68, name:"T-Shirt Bags",               buildTo:1,  vendor:"I SUPPLY",   price:18.99,  unit:"500",       countUnit:"case"},
       {id:69, name:"Plastic Wrap",               buildTo:1,  vendor:"I SUPPLY",   price:23.89,  unit:"2000'",     countUnit:"roll"},
       {id:70, name:"Aluminum Foil Roll",         buildTo:1,  vendor:"US FOODS",   price:103.49, unit:"18×1000",   countUnit:"roll"},
-      {id:71, name:"Pizza Boxes",                buildTo:4,  vendor:"PFG",        price:null,   unit:"50 CT",      countUnit:"case"},
+      {id:71, name:"Pizza Boxes",                buildTo:1,  vendor:"PFG",        price:null,   unit:"50 CT",      countUnit:"case"},
     ]
   },
   {
     id:"walkin", name:"Walk-In Cooler", icon:"❄️",
     items:[
       {id:72, name:"Baby Carrots",               buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.90, unit:"4/5 LB"},
-      {id:73, name:"Broccoli",                   buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG",      price:35.89, unit:"20 LB"},
+      {id:73, name:"Broccoli",                   buildTo:null,eventDriven:true, vendor:"PFG",      price:35.89, unit:"20 LB"},
       {id:74, name:"Green Onions",               buildTo:2,  vendor:"US FOODS",   price:23.37,  unit:"4/2 LB"},
       {id:75, name:"Cucumbers",                  buildTo:null,eventDriven:true, vendor:"PFG",      price:10.32, unit:"12 EA"},
-      {id:76, name:"Celery Sticks",              buildTo:3,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
-      {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB"},
+      {id:76, name:"Celery Sticks",              buildTo:2,  vendor:"PFG",        price:35.00,  unit:"2/5 LB"},
+      {id:77, name:"Shredded Lettuce",           buildTo:6,  vendor:"PFG",        price:33.50,  unit:"6/2 LB", countUnit:"2-pound bag"},
       {id:79, name:"Burger Patties",             buildTo:5,  tuesdayBuildTo:3, fridayBuildTo:5, vendor:"PFG", price:64.22, unit:"48/4 OZ"},
       {id:81, name:"Double Lobe Chicken Breasts",buildTo:4,  tuesdayBuildTo:3, fridayBuildTo:4, vendor:"US FOODS", price:94.75, unit:"4/5 LB", countUnit:"5-pound bag"},
-      {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, eventOrderQty:3,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:51.38, unit:"40 LB"},
-      {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:22.63, unit:"5 LB"},
-      {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:27.92, unit:"10 LB"},
+      {id:82, name:"Chicken Wings",              buildTo:7,  tuesdayBuildTo:3, fridayBuildTo:7, vendor:"US FOODS", price:51.38, unit:"40 LB"},
+      {id:83, name:"Assorted Peppers",           buildTo:null,eventDriven:true, vendor:"US FOODS", price:22.63, unit:"5 LB"},
+      {id:84, name:"Cherry Tomatoes",            buildTo:null,eventDriven:true, vendor:"US FOODS", price:27.92, unit:"10 LB"},
       {id:85, name:"American Slices 120 CT",     buildTo:4,  vendor:"PFG",        price:54.46,  unit:"4/5#",       countUnit:"5-pound pack"},
       {id:92, name:"Pecorino Romano Blend",      buildTo:1,  vendor:"PFG",        price:110.05, unit:"4/5 LB",     countUnit:"5-pound bag"},
-      {id:93, name:"Parmesan Cheese",            buildTo:1,  vendor:"US FOODS",   price:63.98,  unit:"2/5 LB",     countUnit:"5-pound bag"},
-      {id:94, name:"Mild Cheddar Cheese",        buildTo:null,eventDriven:true, vendor:"US FOODS", price:66.25, unit:"4/5 LB"},
+      {id:93, name:"Parmesan Cheese",            buildTo:3,  vendor:"US FOODS",   price:63.98,  unit:"2/5 LB",     countUnit:"5-pound bag"},
+      {id:94, name:"Mild Cheddar Cheese",        buildTo:null,eventDriven:true, vendor:"US FOODS", price:66.25, unit:"4/5 LB", countUnit:"5-pound bag"},
       {id:95, name:"Oranges",                    buildTo:2,  vendor:"US FOODS",   price:51.69,  unit:"88 CT"},
       {id:96, name:"Limes",                      buildTo:2,  vendor:"PFG",        price:21.55,  unit:"48 EA"},
       {id:97, name:"Sliced Red Tomatoes",        buildTo:2,  vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
       {id:98, name:"Sliced Red Onions",          buildTo:2,  vendor:"US FOODS",   price:null,   unit:"2/5 LB"},
-      {id:99, name:"Diced Tomatoes",             buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
-      {id:43, name:"Diced Red Onions",           buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB"},
+      {id:99, name:"Diced Tomatoes",             buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB", countUnit:"5-pound bag"},
+      {id:43, name:"Diced Red Onions",           buildTo:2,  vendor:"GFS",        price:null,   unit:"2/5 LB", countUnit:"5-pound bag"},
       {id:104,name:"Pizza Cheese",               buildTo:10, tuesdayBuildTo:5, fridayBuildTo:10, vendor:"PFG", price:95.69, unit:"6/5 LB", countUnit:"5-pound bag"},
-      {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL"},
+      {id:106,name:"Caesar Dressing",            buildTo:3,  vendor:"US FOODS",   price:65.83,  unit:"4/1 GAL",    countUnit:"gallon"},
       {id:109,name:"Ranch Dressing",             buildTo:8,  vendor:"US FOODS",   price:43.45,  unit:"4/1 GAL", countUnit:"gallon"},
-      {id:237,name:"Simple Syrup",               buildTo:10, vendor:"HOUSE BUILD", price:null,   unit:"HOUSE MADE", countUnit:"gallon", houseBuild:true},
-      {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, eventOrderQty:1,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:34.58, unit:"4/5 LB"},
-      {id:111,name:"Pickles",                    buildTo:1,  vendor:"PFG",        price:35.68,  unit:"5 GAL"},
+      {id:110,name:"Sour Cream",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:34.58, unit:"4/5 LB", countUnit:"5-pound tub"},
+      {id:111,name:"Pickles",                    buildTo:0.25,vendor:"PFG",        price:35.68,  unit:"5 GAL"},
       {id:112,name:"Bacon Toppings",             buildTo:2,  vendor:"US FOODS",   price:82.59,  unit:"2/5 LB"},
       {id:113,name:"Sliced Bacon",               buildTo:3,  vendor:"PFG",        price:76.44,  unit:"15 LB"},
     ]
@@ -438,16 +480,17 @@ const CATEGORIES = [
     id:"freezer", name:"Freezer", icon:"🧊",
     items:[
       {id:114,name:"Potato Hamburger Bun",       buildTo:3,  tuesdayBuildTo:2, fridayBuildTo:3,  vendor:"US FOODS", price:29.00, unit:"5/12"},
-      {id:115,name:"Fries",                      buildTo:13, tuesdayBuildTo:10, fridayBuildTo:13, vendor:"PFG", price:42.02, unit:"6/5 LB"},
+      {id:115,name:"Fries",                      buildTo:13*FRY_PAR_MULTIPLIER, tuesdayBuildTo:10*FRY_PAR_MULTIPLIER, fridayBuildTo:13*FRY_PAR_MULTIPLIER, vendor:"PFG", price:42.02, unit:"6/5 LB"},
       {id:116,name:"Flatbread Dough",            buildTo:6,  tuesdayBuildTo:5, fridayBuildTo:6,  vendor:"PFG",      price:63.34, unit:"28/1"},
       {id:117,name:"Pepperoni",                  buildTo:4,  vendor:"PFG",        price:59.85,  unit:"10 LB"},
-      {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG",      price:63.16, unit:"2/5 LB", countUnit:"5-pound bag"},
+      {id:119,name:"Fajita Chicken",             buildTo:null,eventDriven:true, vendor:"PFG",      price:63.16, unit:"2/5 LB", countUnit:"5-pound bag"},
       {id:120,name:"Beer Cheese Dip",            buildTo:12, vendor:"US FOODS",   price:69.01,  unit:"4/5 LB"},
-      {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, eventOrderQty:21,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"US FOODS", price:74.17, unit:"4/5 LB", countUnit:"5-pound bag"},
-      {id:122,name:"Tenders",                    buildTo:12, tuesdayBuildTo:8, fridayBuildTo:12, eventOrderQty:3,eventOrderCycle:"friday",eventOrderThrough:"2026-08-07", vendor:"PFG", price:32.98, unit:"2/5 LB"},
-      {id:125,name:"Milwaukee Pretzel",          buildTo:12, tuesdayBuildTo:7, fridayBuildTo:12, vendor:"US FOODS", price:58.25, unit:"8/24 OZ"},
+      {id:121,name:"JTM Taco Meat",              buildTo:null,eventDriven:true, vendor:"US FOODS", price:74.17, unit:"4/5 LB", countUnit:"5-pound bag"},
+      {id:122,name:"Tenders",                    buildTo:12, tuesdayBuildTo:8, fridayBuildTo:12, vendor:"PFG", price:32.98, unit:"2/5 LB"},
+      {id:125,name:"24 Ounce Pretzel",           buildTo:12, tuesdayBuildTo:7, fridayBuildTo:12, vendor:"US FOODS", price:58.25, unit:"8/24 OZ"},
       {id:128,name:"Tater Kegs",                 buildTo:null,eventDriven:true, vendor:"US FOODS", price:41.37, unit:"10 LB"},
       {id:236,name:"Variety Dessert Bars",       buildTo:null,eventDriven:true, vendor:"SYSCO ONLY", price:null, unit:"8/8 CT"},
+      {id:239,name:"Mozzarella Sticks",          buildTo:6,  vendor:"US FOODS",   price:null, unit:"", countUnit:"case"},
     ]
   },
   {
@@ -468,9 +511,9 @@ const CATEGORIES = [
       {id:142,name:"Dishmachine Detergent",      buildTo:2,  vendor:"US FOODS",   price:116.30, unit:"1 EA"},
       {id:144,name:"Stainless Steel Scrubber",   buildTo:1,  vendor:"US FOODS",   price:41.31,  unit:"6/12"},
       {id:145,name:"Green Scrubbies",            buildTo:1,  vendor:"US FOODS",   price:9.55,   unit:"20 EA"},
-      {id:146,name:"M Nitrile Gloves",           buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:"10/100"},
-      {id:147,name:"L Nitrile Gloves",           buildTo:4,  vendor:"I SUPPLY",   price:29.95,  unit:"10/100"},
-      {id:148,name:"XL Nitrile Gloves",          buildTo:4,  vendor:"I SUPPLY",   price:59.95,  unit:"10/100"},
+      {id:146,name:"M Nitrile Gloves",           buildTo:12, vendor:"I SUPPLY",   price:null,   unit:"10/100", countUnit:"box"},
+      {id:147,name:"L Nitrile Gloves",           buildTo:12, vendor:"I SUPPLY",   price:29.95,  unit:"10/100", countUnit:"box"},
+      {id:148,name:"XL Nitrile Gloves",          buildTo:12, vendor:"I SUPPLY",   price:59.95,  unit:"10/100", countUnit:"box"},
       {id:149,name:"Fryer Filters",              buildTo:1,  vendor:"I SUPPLY",   price:null,   unit:""},
     ]
   },
@@ -478,29 +521,85 @@ const CATEGORIES = [
     id:"beverage", name:"Beverage Dock", icon:"🍹",
     items:[
       {id:150,name:"Daily's Sweet & Sour Mix",   buildTo:4,  vendor:"US FOODS",   price:38.36,  unit:"4/1 GAL"},
+      {id:240,name:"Vanilla Monin",              buildTo:4,  vendor:"US FOODS",   price:null,   unit:"", countUnit:"bottle"},
       {id:151,name:"Chafing Fuel Can 6 Hour",    buildTo:2,  vendor:"US FOODS",   price:71.80,  unit:"24 CT"},
       {id:152,name:"Aluminum 1/2 Pans",          buildTo:4,  vendor:"US FOODS",   price:91.89,  unit:""},
-      {id:153,name:"Aluminum 1/3 Pans",          buildTo:4,  vendor:"US FOODS",   price:null,   unit:""},
+      {id:153,name:"Aluminum 1/3 Pans",          buildTo:4,  vendor:"US FOODS",   price:null,   unit:"100 EA"},
     ]
   },
 ];
 
 // ── State ──────────────────────────────────────────────
 const STATE_KEY = 'kitchen_order_v1';
-const COUNT_UNIT_MIGRATION_KEY = 'kitchen_order_count_units_v2';
+const COUNT_UNIT_MIGRATION_KEY = 'kitchen_order_count_units_v3';
+const ORDER_OVERRIDES_KEY = 'kitchen_order_manual_overrides_v1';
+const ITEM_MASTER_PRICE_URL = '/api/item_master?format=inventory';
+const INVENTORY_VENDOR_IDS = {'us foods':1,'pfg':2,'sysco':3,'sysco only':3};
+// Keep the original item/vendor mappings above as the reversible archive, but
+// never display or price from an archived supplier in the active sheet.
+const ARCHIVED_INVENTORY_VENDOR_NAMES = new Set(['gfs']);
+const TUESDAY_AUGUST_25_OVERRIDES = {
+  deliveryDate:'2026-08-25',
+  orderDate:'2026-08-24',
+  overrides:{
+    'Tortilla, Flour 12"':{quantity:0,mode:'cases'},
+    'Tortilla, Flour 6"':{quantity:0,mode:'cases'},
+    'Garlic Parmesan':{quantity:0,mode:'cases'},
+    'Shortening':{quantity:0,mode:'cases'},
+    'Styrofoam To-Go Containers':{quantity:0,mode:'cases'},
+    'Napkins C Fold':{quantity:0,mode:'cases'},
+    'Double Lobe Chicken Breasts':{quantity:0,mode:'cases'},
+    'Oranges':{quantity:0,mode:'cases'},
+    'Diced Tomatoes':{quantity:0,mode:'cases'},
+    'Diced Red Onions':{quantity:0,mode:'cases'},
+    'Ranch Dressing':{quantity:0,mode:'cases'},
+    'Pickles':{quantity:0,mode:'cases'},
+    'Bacon Toppings':{quantity:0,mode:'cases'},
+    'Green Scrubbies':{quantity:0,mode:'cases'},
+    'Crushed Red Pepper Packets':{quantity:0,mode:'cases'},
+    'Premium Buttery Pan & Grill':{quantity:1,mode:'cases'},
+    'Fire Roasted Salsa':{quantity:1,mode:'cases'},
+    'Pizza Cheese':{quantity:1,mode:'cases'},
+    'Sour Cream':{quantity:1,mode:'cases'},
+    'M Nitrile Gloves':{quantity:1,mode:'cases'},
+    'Sliced Red Tomatoes':{quantity:2,mode:'cases'},
+    'Tenders':{quantity:5,mode:'cases',vendorId:1},
+    'Fries':{quantity:6,mode:'cases',vendorId:2},
+    '24 Ounce Pretzel':{quantity:4,mode:'minimum_cases',required_pack:'24 oz'},
+  },
+};
 let state = {};
 let sectionObserver = null;
 let sharedSnapshotId = null;
 let sharedSyncReady = false;
 let hasUnsavedChanges = false;
+let selectedTruckCycle = currentTruckCycle();
+let partyDemandSnapshot = null;
+let partyDemandReady = false;
+let partyDemandLoading = false;
+let partyOverrideEnabled = false;
+let partyOverrideReason = '';
+let manualOrderOverridesText = '';
+let inventoryPricingReady = false;
+let inventoryPricingLoading = false;
+let inventoryPricingPromise = null;
+let inventoryPriceCheckedAt = null;
+let inventoryPriceSyncedAt = null;
+let inventoryPriceMissing = [];
+let inventoryPriceSubstitutions = [];
 
 function loadState(){
   try{
     const s=localStorage.getItem(STATE_KEY);
     if(s) state=JSON.parse(s);
+    manualOrderOverridesText=localStorage.getItem(ORDER_OVERRIDES_KEY) || '';
     if(localStorage.getItem(COUNT_UNIT_MIGRATION_KEY)!=='done'){
       delete state[17];
+      delete state[41];
       delete state[81];
+      delete state[146];
+      delete state[147];
+      delete state[148];
       localStorage.setItem(STATE_KEY,JSON.stringify(state));
       localStorage.setItem(COUNT_UNIT_MIGRATION_KEY,'done');
     }
@@ -548,37 +647,287 @@ function localIsoDate(date=new Date()){
   return `${year}-${month}-${day}`;
 }
 
-function activeEventOrderQty(item, date=new Date()){
-  if(item.eventOrderCycle && item.eventOrderCycle!==currentTruckCycle(date)) return 0;
-  if(item.eventOrderThrough && localIsoDate(date)>item.eventOrderThrough) return 0;
-  const qty=Number(item.eventOrderQty || 0);
+function activeTruckCycle(){
+  return selectedTruckCycle;
+}
+
+function partyNeedForItem(item){
+  if(!partyDemandSnapshot) return 0;
+  const match=(partyDemandSnapshot.item_totals || []).find(row=>
+    normalizeName(row.inventory_item)===normalizeName(item.name)
+  );
+  const qty=Number(match && match.converted_quantity);
   return Number.isFinite(qty) && qty>0 ? qty : 0;
 }
 
-function calculatedOrderQty(item, raw, date=new Date()){
-  const eventQty=activeEventOrderQty(item,date);
-  if(item.eventDriven) return eventQty;
-  const standingQty=calcOrder(activeBuildTo(item),raw);
-  if(standingQty===null) return eventQty>0 ? eventQty : null;
-  return standingQty+eventQty;
+function calculatedOrderQty(item, raw){
+  const partyNeed=partyNeedForItem(item);
+  if(raw===''||raw===undefined||raw===null){
+    if(item.eventDriven && partyNeed<=0) return 0;
+    return null;
+  }
+  const onHand=Number(raw);
+  if(!Number.isFinite(onHand)) return null;
+  if(item.eventDriven) return Math.max(0,partyNeed-onHand);
+  return Math.max(0,Number(activeBuildTo(item)||0)+partyNeed-onHand);
 }
 
-function currentCycleLabel(date=new Date()){
-  return currentTruckCycle(date)==='friday'
+function currentCycleLabel(date){
+  const cycle=date instanceof Date ? currentTruckCycle(date) : activeTruckCycle();
+  return cycle==='friday'
     ? 'Thursday Order · Friday Delivery'
     : 'Tuesday Delivery';
 }
 
 function activeBuildTo(item){
   if(item.eventDriven) return null;
-  return DELIVERY_PARS[currentTruckCycle()][normalizeName(item.name)];
+  return DELIVERY_PARS[activeTruckCycle()][normalizeName(item.name)];
 }
 
 function countUnitLabel(item, quantity=activeBuildTo(item)){
   const unit=item.countUnit || 'case';
   if(quantity===1 || unit==='each') return unit;
   if(unit.endsWith('box')) return unit.slice(0,-3)+'boxes';
+  if(unit==='5-pound tub') return '5-pound tubs';
+  if(unit==='2-pound bag') return '2-pound bags';
+  if(unit==='68-ounce container') return '68-ounce containers';
   return unit+'s';
+}
+
+function formatQty(value){
+  const number=Number(value);
+  if(!Number.isFinite(number)) return '–';
+  return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+}
+
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g,char=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[char]);
+}
+
+function allInventoryItems(){
+  return CATEGORIES.flatMap(category=>category.items);
+}
+
+function inventoryVendorId(item){
+  return INVENTORY_VENDOR_IDS[normalizeName(item.vendor)] || null;
+}
+
+function isArchivedInventoryVendor(item){
+  return ARCHIVED_INVENTORY_VENDOR_NAMES.has(normalizeName(item.vendor));
+}
+
+function inventoryVendorLabel(item){
+  return item.inventoryPriceVendor || (isArchivedInventoryVendor(item) ? 'Active Supplier' : item.vendor);
+}
+
+function staticInventoryUnitPrice(item){
+  if(item.price===null || item.price===undefined || item.price==='') return null;
+  const price=Number(item.price);
+  if(!Number.isFinite(price) || price<0) return null;
+  const countUnit=normalizeName(item.countUnit || 'case');
+  if(countUnit==='case') return price;
+  const pack=String(item.unit || '').trim();
+  const match=pack.match(/^(\d+(?:\.\d+)?)\s*(?:\/|x|×)/i);
+  const units=match ? Number(match[1]) : 1;
+  return Number.isFinite(units) && units>0 ? price/units : null;
+}
+
+function inventoryUnitPrice(item){
+  if(item.inventoryUnitPrice!==null && item.inventoryUnitPrice!==undefined){
+    const live=Number(item.inventoryUnitPrice);
+    if(Number.isFinite(live) && live>=0) return live;
+  }
+  // Broadliner values must come from Item Master after a sync; never let a
+  // stale hard-coded supplier price silently fill a missing live quote.
+  if(inventoryVendorId(item) || isArchivedInventoryVendor(item)) return null;
+  return staticInventoryUnitPrice(item);
+}
+
+function inventoryValuation(){
+  let total=0;
+  let counted=0;
+  const missing=[];
+  for(const item of allInventoryItems()){
+    const raw=getOnHand(item.id);
+    if(raw==='' || raw===undefined || raw===null) continue;
+    const onHand=Number(raw);
+    if(!Number.isFinite(onHand) || onHand<0) continue;
+    counted++;
+    const unitPrice=inventoryUnitPrice(item);
+    if(unitPrice===null){
+      if(onHand>0) missing.push(item.name);
+      continue;
+    }
+    total+=onHand*unitPrice;
+  }
+  return {total,counted,missing};
+}
+
+function formatMoney(value){
+  const number=Number(value);
+  if(!Number.isFinite(number)) return '–';
+  return number.toLocaleString('en-US',{style:'currency',currency:'USD'});
+}
+
+function priceSyncTime(value){
+  if(!value) return 'now';
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime())) return 'now';
+  return date.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+
+function setPriceStatus(text,isError=false,title=''){
+  const el=document.getElementById('priceStatus');
+  if(!el) return;
+  el.textContent=text;
+  el.className='stat-value'+(isError?' red':'');
+  el.title=title;
+}
+
+function latestApprovedQuote(quotes){
+  const rows=Object.values(quotes || {}).filter(quote=>{
+    const unitPrice=Number(quote && quote.price_per_count_unit);
+    return Number.isFinite(unitPrice) && unitPrice>=0;
+  });
+  rows.sort((a,b)=>{
+    const aTime=Date.parse(a.price_checked_at || '') || 0;
+    const bTime=Date.parse(b.price_checked_at || '') || 0;
+    return bTime-aTime;
+  });
+  return rows[0] || null;
+}
+
+function applyInventoryPricing(data){
+  const feedItems=Array.isArray(data.items) ? data.items : [];
+  const byName={};
+  for(const row of feedItems){
+    if(row && row.name) byName[normalizeName(row.name)]=row;
+  }
+
+  let updated=0;
+  const missing=[];
+  const substitutions=[];
+  for(const item of allInventoryItems()){
+    const vendorId=inventoryVendorId(item);
+    const archivedVendor=isArchivedInventoryVendor(item);
+    if(!vendorId && !archivedVendor) continue;
+    delete item.inventoryUnitPrice;
+    delete item.inventoryPriceCheckedAt;
+    delete item.inventoryPriceVendor;
+
+    const names=[item.name].concat(item.aliases || []);
+    const row=names.map(name=>byName[normalizeName(name)]).find(Boolean);
+    const exactQuote=vendorId && row && row.quotes && row.quotes[String(vendorId)];
+    const allowSubstitution=archivedVendor || normalizeName(item.vendor)!=='sysco only';
+    const quote=exactQuote || (
+      allowSubstitution && row ? latestApprovedQuote(row.quotes) : null
+    );
+    const unitPrice=Number(quote && quote.price_per_count_unit);
+    const expectedUnit=normalizeName(item.countUnit || 'case');
+    const syncedUnit=normalizeName(quote && quote.count_unit);
+    if(!quote || !Number.isFinite(unitPrice) || unitPrice<0 || syncedUnit!==expectedUnit){
+      missing.push(item.name);
+      continue;
+    }
+
+    item.inventoryUnitPrice=unitPrice;
+    item.inventoryPriceCheckedAt=quote.price_checked_at || null;
+    item.inventoryPriceVendor=quote.vendor || item.vendor;
+    if(!exactQuote){
+      substitutions.push(`${item.name} → ${item.inventoryPriceVendor}`);
+    }
+    updated++;
+  }
+
+  inventoryPricingReady=true;
+  inventoryPriceCheckedAt=data.latest_price_checked_at || null;
+  inventoryPriceSyncedAt=data.generated_at || new Date().toISOString();
+  inventoryPriceMissing=missing;
+  inventoryPriceSubstitutions=substitutions;
+  const statusDetails=[`${updated} Item Master prices loaded`];
+  if(substitutions.length) statusDetails.push(`${substitutions.length} used the latest approved alternate supplier`);
+  if(missing.length) statusDetails.push(`${missing.length} need review`);
+  setPriceStatus(
+    `Synced ${priceSyncTime(inventoryPriceSyncedAt)}`,
+    false,
+    statusDetails.join('; ')
+  );
+  updateStats();
+  return {updated,missing,substitutions};
+}
+
+async function syncInventoryPrices(opts={}){
+  if(inventoryPricingLoading) return inventoryPricingPromise;
+  const force=!!opts.force;
+  const btn=document.getElementById('syncPricesBtn');
+  inventoryPricingLoading=true;
+  if(btn){
+    btn.setAttribute('disabled','');
+    btn.textContent='Syncing Prices…';
+  }
+  setPriceStatus('Syncing…');
+  updateStats();
+
+  inventoryPricingPromise=(async()=>{
+    try{
+      const resp=await fetch(ITEM_MASTER_PRICE_URL,{cache:'no-store'});
+      const data=await resp.json().catch(()=>({}));
+      if(!resp.ok) throw new Error(data.error || resp.statusText);
+      const result=applyInventoryPricing(data);
+      if(force){
+        const details=[];
+        if(result.substitutions.length) details.push(`${result.substitutions.length} used the latest approved alternate supplier`);
+        if(result.missing.length) details.push(`${result.missing.length} need review`);
+        showToast(
+          `Synced ${result.updated} prices from Item Master.${details.length ? ' '+details.join('; ')+'.' : ''}`,
+          result.missing.length>0,
+          8000
+        );
+      }
+      return result;
+    }catch(error){
+      setPriceStatus(
+        inventoryPricingReady ? `Last sync ${priceSyncTime(inventoryPriceSyncedAt)}` : 'Sync failed',
+        true,
+        error.message
+      );
+      if(force) showToast('Price sync failed: '+error.message,true,8000);
+      return null;
+    }finally{
+      inventoryPricingLoading=false;
+      inventoryPricingPromise=null;
+      if(btn){
+        btn.removeAttribute('disabled');
+        btn.textContent='↻ Sync Prices';
+      }
+    }
+  })();
+  return inventoryPricingPromise;
+}
+
+function setDeliveryCycle(cycle){
+  if(!['tuesday','friday'].includes(cycle) || cycle===selectedTruckCycle) return;
+  selectedTruckCycle=cycle;
+  partyDemandReady=false;
+  partyDemandSnapshot=null;
+  partyOverrideEnabled=false;
+  partyOverrideReason='';
+  updateCycleControls();
+  renderContent();
+  updateStats();
+  refreshPartyDemand({force:true});
+}
+
+function updateCycleControls(){
+  const status=document.getElementById('cycleStatus');
+  const select=document.getElementById('cycleSelect');
+  if(status){
+    status.textContent=currentCycleLabel();
+    status.classList.toggle('friday',activeTruckCycle()==='friday');
+  }
+  if(select) select.value=activeTruckCycle();
 }
 
 // ── Render sidebar ──────────────────────────────────────
@@ -593,9 +942,202 @@ function renderSidebar(){
       </a>`).join('');
 }
 
+function partyStatusLabel(snapshot){
+  if(partyDemandLoading) return 'Refreshing…';
+  if(!snapshot) return 'Not synchronized';
+  if(snapshot.stale) return 'Stale · order blocked';
+  if((snapshot.blocking_warnings || []).length) return 'Review required';
+  return 'Ready';
+}
+
+function renderPartyDemand(){
+  const root=document.getElementById('partyDemandSection');
+  if(!root) return;
+  const snapshot=partyDemandSnapshot;
+  const events=(snapshot && snapshot.event_audit) || [];
+  const items=(snapshot && snapshot.item_totals) || [];
+  const warnings=(snapshot && snapshot.source_warnings) || [];
+  const blocking=(snapshot && snapshot.blocking_warnings) || [];
+  const refreshed=snapshot && snapshot.last_successful_sync
+    ? new Date(snapshot.last_successful_sync).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    : 'Never';
+  const delivery=snapshot && snapshot.delivery_date || 'Waiting for source';
+  const coverage=snapshot
+    ? `${snapshot.coverage_start} through ${snapshot.coverage_end}`
+    : 'Waiting for source';
+  const table=items.length ? `
+    <div class="party-table-wrap"><table class="party-table">
+      <thead><tr><th>Party item</th><th class="num">Raw event requirement</th><th class="num">After 10% buffer</th><th class="num">Converted inventory quantity</th></tr></thead>
+      <tbody>${items.map(item=>`
+        <tr>
+          <td><strong>${escapeHtml(item.inventory_item)}</strong>
+            <span class="party-mapping-note">${escapeHtml(item.conversion_note || '')}</span>
+            ${(item.event_breakdown || []).length ? `<details class="party-events"><summary>Event breakdown</summary><ul>${item.event_breakdown.map(event=>`<li>${escapeHtml(event.event_name)} (${escapeHtml(event.event_date)}): ${formatQty(event.raw_quantity)} ${escapeHtml(event.raw_unit)}</li>`).join('')}</ul></details>` : ''}
+          </td>
+          <td class="num">${formatQty(item.raw_quantity)} ${escapeHtml(item.raw_unit)}</td>
+          <td class="num">${formatQty(item.buffered_quantity)} ${escapeHtml(item.buffered_unit)}</td>
+          <td class="num"><strong>${formatQty(item.converted_quantity)} ${escapeHtml(item.inventory_unit)}</strong></td>
+        </tr>`).join('')}</tbody>
+    </table></div>`
+    : `<div class="party-empty">${partyDemandLoading ? 'Refreshing definite party food requirements…' : snapshot ? 'No mapped party food requirements in this coverage window.' : 'Party data has not been synchronized.'}</div>`;
+  const warningMarkup=warnings.length ? `
+    <div class="party-warning-box" role="${blocking.length?'alert':'status'}"><strong>${blocking.length?'Order generation is blocked':'Source warnings'}</strong><ul>${warnings.map(warning=>`<li>${escapeHtml(warning)}</li>`).join('')}</ul></div>` : '';
+  const overrideMarkup=blocking.length ? `
+    <div class="party-override">
+      <input type="checkbox" id="partyOverrideCheckbox" ${partyOverrideEnabled?'checked':''} onchange="setPartyOverride(this.checked)">
+      <label for="partyOverrideCheckbox"><strong>Manager emergency override</strong> — generate despite the warnings above and record the reason.</label>
+      <input type="text" id="partyOverrideReason" value="${escapeHtml(partyOverrideReason)}" oninput="setPartyOverrideReason(this.value)" placeholder="Required manager reason" aria-label="Manager override reason">
+    </div>` : '';
+  const eventMarkup=events.length ? `
+    <details class="party-events"><summary>${events.length} definite ${events.length===1?'party':'parties'} included</summary><ul>${events.map(event=>`<li>${escapeHtml(event.event_name)} — ${escapeHtml(event.event_date)} (ID ${escapeHtml(event.event_id)})</li>`).join('')}</ul></details>` : '';
+  root.innerHTML=`
+    <div class="party-demand-head">
+      <div><h2>Party Demand</h2><p>Read-only Event Kitchen requirements for delivery ${escapeHtml(delivery)} · Coverage ${escapeHtml(coverage)}</p></div>
+      <div class="party-demand-actions"><span class="party-status">${escapeHtml(partyStatusLabel(snapshot))}</span><button class="btn" onclick="refreshPartyDemand({force:true})" ${partyDemandLoading?'disabled':''}>↻ Refresh</button></div>
+    </div>
+    <div class="party-demand-meta">
+      <div class="party-meta-cell"><span>Delivery and coverage</span><strong>${escapeHtml(delivery)} · ${escapeHtml(coverage)}</strong></div>
+      <div class="party-meta-cell"><span>Definite parties</span><strong>${events.length}</strong></div>
+      <div class="party-meta-cell"><span>Last successful refresh</span><strong>${escapeHtml(refreshed)}</strong></div>
+    </div>
+    ${table}${warningMarkup}${overrideMarkup}${eventMarkup}`;
+}
+
+function setPartyOverride(enabled){
+  partyOverrideEnabled=!!enabled;
+  updateStats();
+}
+
+function setPartyOverrideReason(value){
+  partyOverrideReason=String(value || '');
+  updateStats();
+}
+
+function setManualOrderOverrides(value){
+  manualOrderOverridesText=String(value || '');
+  try{
+    if(manualOrderOverridesText) localStorage.setItem(ORDER_OVERRIDES_KEY,manualOrderOverridesText);
+    else localStorage.removeItem(ORDER_OVERRIDES_KEY);
+  }catch(e){}
+}
+
+function formatManualOrderOverrides(overrides){
+  if(!overrides || typeof overrides!=='object' || Array.isArray(overrides)) return '';
+  const vendorNames={1:'US Foods',2:'PFG',3:'Sysco'};
+  return Object.entries(overrides).map(([name,override])=>{
+    if(!override || typeof override!=='object') return '';
+    const quantity=Number(override.quantity);
+    if(!Number.isFinite(quantity) || quantity<0) return '';
+    const caseMode=override.mode==='cases' || override.mode==='minimum_cases';
+    const unit=caseMode ? (quantity===1 ? 'case' : 'cases') : 'units';
+    const minimum=override.mode==='minimum_cases' ? 'minimum ' : '';
+    const pack=override.required_pack ? ` (${override.required_pack} only)` : '';
+    const vendor=vendorNames[Number(override.vendorId)];
+    return `${name} = ${minimum}${formatQty(quantity)} ${unit}${pack}${vendor ? ` @ ${vendor}` : ''}`;
+  }).filter(Boolean).join('\n');
+}
+
+function scheduledOrderOverridesActive(){
+  const delivery=partyDemandSnapshot && partyDemandSnapshot.delivery_date;
+  return activeTruckCycle()==='tuesday' && (
+    delivery===TUESDAY_AUGUST_25_OVERRIDES.deliveryDate ||
+    (!delivery && localIsoDate()===TUESDAY_AUGUST_25_OVERRIDES.orderDate)
+  );
+}
+
+function ensureScheduledOrderOverrides(){
+  if(!scheduledOrderOverridesActive()) return;
+  let existing={};
+  try{ existing=parseManualOrderOverrides(); }catch(error){ return; }
+  const merged={...existing,...TUESDAY_AUGUST_25_OVERRIDES.overrides};
+  setManualOrderOverrides(formatManualOrderOverrides(merged));
+}
+
+function parseManualOrderOverrides(){
+  const result={};
+  const vendorIds={'us foods':1,usf:1,pfg:2,sysco:3};
+  const itemNames=new Map();
+  for(const cat of CATEGORIES){
+    for(const item of cat.items) itemNames.set(normalizeName(item.name),item.name);
+  }
+  const lines=manualOrderOverridesText.split(/\r?\n/);
+  lines.forEach((rawLine,index)=>{
+    const line=rawLine.trim();
+    if(!line || line.startsWith('#')) return;
+    const match=line.match(/^(.+?)\s*=\s*(minimum\s+)?(\d+(?:\.\d+)?)\s*(cases?|units?)(?:\s*\((.+?)\s+only\))?(?:\s*@\s*(us foods|usf|pfg|sysco))?$/i);
+    if(!match) throw new Error(`Override line ${index+1} is invalid: ${line}`);
+    const canonicalName=itemNames.get(normalizeName(match[1]));
+    if(!canonicalName) throw new Error(`Override line ${index+1} has an unknown item: ${match[1]}`);
+    if(result[canonicalName]) throw new Error(`Override line ${index+1} repeats ${canonicalName}`);
+    const quantity=Number(match[3]);
+    const isCase=match[4].toLowerCase().startsWith('case');
+    if(match[2] && !isCase) throw new Error(`Override line ${index+1} can use minimum only with cases.`);
+    const mode=isCase ? (match[2] ? 'minimum_cases' : 'cases') : 'count_unit';
+    if(isCase && !Number.isInteger(quantity)) throw new Error(`Override line ${index+1} must use a whole number of cases.`);
+    result[canonicalName]={quantity,mode};
+    if(match[5]) result[canonicalName].required_pack=match[5].trim();
+    if(match[6]) result[canonicalName].vendorId=vendorIds[normalizeName(match[6])];
+  });
+  return result;
+}
+
+function renderManualOrderOverrides(){
+  return `<section class="manual-overrides" id="manualOrderOverridesSection">
+    <h2>Manual Order Overrides</h2>
+    <p>One per line: <strong>Item = quantity cases</strong>. Use <strong>minimum 4 cases</strong> for a floor, <strong>units</strong> for an inventory piece, and <strong>@ PFG</strong>, <strong>@ US Foods</strong>, or <strong>@ Sysco</strong> to force a vendor. These change the generated order only, not the saved on-hand count.</p>
+    <textarea id="manualOrderOverridesText" aria-label="Manual order overrides" placeholder="Example: 24 Ounce Pretzel = minimum 4 cases (24 oz only)" oninput="setManualOrderOverrides(this.value)">${escapeHtml(manualOrderOverridesText)}</textarea>
+  </section>`;
+}
+
+function applyPartyDemand(snapshot){
+  partyDemandSnapshot=snapshot || null;
+  partyDemandReady=!!snapshot;
+  ensureScheduledOrderOverrides();
+  if(snapshot && !(snapshot.blocking_warnings || []).length){
+    partyOverrideEnabled=false;
+    partyOverrideReason='';
+  }
+  renderContent();
+  updateStats();
+  observeSections();
+}
+
+async function refreshPartyDemand(opts={}){
+  const headerButton=document.getElementById('refreshPartyBtn');
+  partyDemandLoading=true;
+  partyDemandReady=false;
+  if(headerButton) headerButton.setAttribute('disabled','');
+  renderPartyDemand();
+  updateStats();
+  try{
+    const params=new URLSearchParams({cycle:activeTruckCycle(),refresh:'1'});
+    const resp=await fetch(`/api/party_demand?${params}`,{cache:'no-store'});
+    const data=await resp.json().catch(()=>({}));
+    if(!resp.ok || !data.snapshot) throw new Error(data.error || resp.statusText);
+    partyDemandLoading=false;
+    applyPartyDemand(data.snapshot);
+    if(opts.force) showToast(data.snapshot.can_generate ? 'Party demand refreshed.' : 'Party demand refreshed with blocking warnings.',!data.snapshot.can_generate,8000);
+    return data.snapshot;
+  }catch(error){
+    partyDemandLoading=false;
+    partyDemandReady=!!partyDemandSnapshot;
+    if(partyDemandSnapshot){
+      partyDemandSnapshot={...partyDemandSnapshot,stale:true,can_generate:false,
+        source_warnings:[...(partyDemandSnapshot.source_warnings || []),`Refresh failed: ${error.message}`],
+        blocking_warnings:[...(partyDemandSnapshot.blocking_warnings || []),`Refresh failed: ${error.message}`]};
+    }
+    renderPartyDemand();
+    updateStats();
+    if(opts.force || opts.beforeOrder) showToast('Party refresh failed: '+error.message,true,9000);
+    return null;
+  }finally{
+    if(headerButton) headerButton.removeAttribute('disabled');
+  }
+}
+
 // ── Render content ──────────────────────────────────────
 function renderContent(){
-  document.getElementById('content').innerHTML = CATEGORIES.map(cat=>`
+  document.getElementById('content').innerHTML = '<section class="party-demand" id="partyDemandSection" aria-live="polite"></section>' + renderManualOrderOverrides() + CATEGORIES.map(cat=>`
     <section class="cat-section" id="${cat.id}">
       <div class="cat-title">
         ${cat.icon} ${cat.name}
@@ -603,19 +1145,21 @@ function renderContent(){
       </div>
       <div class="items-grid">${cat.items.map(renderCard).join('')}</div>
     </section>`).join('');
+  renderPartyDemand();
 }
 
 function renderCard(item){
   const oh = getOnHand(item.id);
   const buildTo=activeBuildTo(item);
+  const partyNeed=partyNeedForItem(item);
   const qty = calculatedOrderQty(item,oh);
   const needsOrder = qty !== null && qty > 0;
-  const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = qty===null ? '–' : qty===0 ? '✓' : formatQty(qty);
   const orderCls = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
   const parField = item.eventDriven
-    ? `<div class="field-static event-status">Event-driven<span class="field-unit">${countUnitLabel(item,qty)}</span></div>`
+    ? `<div class="field-static event-status">Party only<span class="field-unit">No standing PAR</span></div>`
     : `<div class="field-static">${buildTo}<span class="field-unit">${countUnitLabel(item)}</span></div>`;
-  const countField = `<input type="number" min="0" step="0.5"
+  const countField = `<input type="number" min="0" step="0.25"
       value="${oh}"
       placeholder="–"
       oninput="updateItem(${item.id},this.value)"
@@ -624,7 +1168,7 @@ function renderCard(item){
     <div class="item-card${needsOrder?' needs-order':''}" id="card-${item.id}">
       <div class="card-top">
         <div class="item-name">${item.name}</div>
-        <div class="vendor-tag">${item.vendor}</div>
+        <div class="vendor-tag">${inventoryVendorLabel(item)}</div>
       </div>
       <div class="card-fields">
         <div class="field">
@@ -636,7 +1180,11 @@ function renderCard(item){
           ${countField}
         </div>
         <div class="field">
-          <div class="field-label">Order</div>
+          <div class="field-label">Party Need</div>
+          <div class="field-static">${formatQty(partyNeed)}<span class="field-unit">${countUnitLabel(item,partyNeed)}</span></div>
+        </div>
+        <div class="field">
+          <div class="field-label">Final Order</div>
           <div class="order-qty ${orderCls}" id="oq-${item.id}">${orderText}</div>
         </div>
       </div>
@@ -653,7 +1201,7 @@ function updateItem(id, val){
   const oh = val==='' ? '' : parseFloat(val);
   const qty = calculatedOrderQty(item,oh);
   const needsOrder = qty!==null && qty>0;
-  const orderText = item.eventDriven ? qty : qty===null ? '–' : qty===0 ? '✓' : qty;
+  const orderText = qty===null ? '–' : qty===0 ? '✓' : formatQty(qty);
   const orderCls  = qty===null ? 'empty' : qty===0 ? 'zero' : 'positive';
 
   document.getElementById(`oq-${id}`).textContent = orderText;
@@ -671,12 +1219,16 @@ function updateStats(){
     let catNeed=0;
     for(const item of cat.items){
       const oh=getOnHand(item.id);
-      const eventQty=activeEventOrderQty(item);
-      if((oh===''||oh===undefined) && eventQty<=0){ uncounted++; continue; }
+      const partyNeed=partyNeedForItem(item);
+      if(oh===''||oh===undefined){
+        if(!item.eventDriven || partyNeed>0) uncounted++;
+        continue;
+      }
       const qty=calculatedOrderQty(item,oh);
       if(qty>0){
         need++; catNeed++;
-        vendorCounts[item.vendor]=(vendorCounts[item.vendor]||0)+1;
+        const vendorLabel=inventoryVendorLabel(item);
+        vendorCounts[vendorLabel]=(vendorCounts[vendorLabel]||0)+1;
       } else { stocked++; }
     }
     const sc=document.getElementById(`sc-${cat.id}`);
@@ -694,11 +1246,37 @@ function updateStats(){
   document.getElementById('stockedCount').textContent=stocked;
   document.getElementById('uncountedCount').textContent=uncounted;
 
+  const valueEl=document.getElementById('inventoryValue');
+  const valuation=inventoryValuation();
+  if(valueEl){
+    if(!inventoryPricingReady){
+      valueEl.textContent=inventoryPricingLoading ? 'Syncing…' : 'Not synced';
+      valueEl.className='stat-value';
+      valueEl.title='Sync Item Master prices to calculate the inventory value.';
+    }else{
+      valueEl.textContent=formatMoney(valuation.total);
+      valueEl.className='stat-value'+(valuation.missing.length ? ' red' : ' green');
+      valueEl.title=valuation.missing.length
+        ? `Partial value: no current approved price for ${valuation.missing.join(', ')}`
+        : `${valuation.counted} counted items valued from current Item Master prices`;
+    }
+  }
+
   // Never allow an order until this browser has checked the shared inventory.
   const genBtn = document.getElementById('generateBtn');
+  const blockingWarnings=(partyDemandSnapshot && partyDemandSnapshot.blocking_warnings) || [];
+  const overrideReady=blockingWarnings.length>0 && partyOverrideEnabled && partyOverrideReason.trim().length>0 && partyDemandSnapshot && partyDemandSnapshot.id!==null && partyDemandSnapshot.id!==undefined;
   if(!sharedSyncReady){
     genBtn.setAttribute('disabled','');
     genBtn.title = 'Checking the latest shared inventory before ordering';
+  } else if(!partyDemandReady || partyDemandLoading){
+    genBtn.setAttribute('disabled','');
+    genBtn.title = 'Refreshing definite party demand before ordering';
+  } else if(blockingWarnings.length && !overrideReady){
+    genBtn.setAttribute('disabled','');
+    genBtn.title = partyOverrideEnabled && !partyOverrideReason.trim()
+      ? 'Enter the manager override reason to continue'
+      : 'Party demand has blocking warnings; review them or use the manager emergency override';
   } else if(uncounted === 0){
     genBtn.removeAttribute('disabled');
     genBtn.title = 'Inventory is synced and fully counted — click to generate the weekly order';
@@ -748,6 +1326,14 @@ async function saveSharedSnapshot(){
     return false;
   }
 
+  let orderOverrides={};
+  try{
+    orderOverrides=parseManualOrderOverrides();
+  }catch(error){
+    showToast('Save blocked: '+error.message,true,9000);
+    return false;
+  }
+
   btn.textContent='Saving…';
   btn.setAttribute('disabled','');
   setSaveStatus('Saving…');
@@ -758,6 +1344,8 @@ async function saveSharedSnapshot(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         notes:'Saved from Kitchen Inventory Sheet',
+        party_demand_snapshot_id:partyDemandSnapshot && partyDemandSnapshot.id,
+        order_overrides:orderOverrides,
         items:rows,
       }),
     });
@@ -817,7 +1405,9 @@ function applySharedSnapshot(data){
       const savedRow=matchedName===undefined ? undefined : rowsByName[normalizeName(matchedName)];
       const expectedUnit=normalizeName(item.countUnit || 'case');
       const savedUnit=normalizeName(savedRow && savedRow.unit);
-      if(savedUnit && savedUnit!==expectedUnit) continue;
+      const legacyCaseUnitItems=new Set(['use first stickers','labels','holy gospel','holy cow','holy voodoo','blanco']);
+      const legacyServerUnit=savedUnit==='case' && legacyCaseUnitItems.has(normalizeName(item.name));
+      if(savedUnit && savedUnit!==expectedUnit && !legacyServerUnit) continue;
       if(val!==undefined && val!==null && val!==''){
         nextState[item.id]=parseFloat(val);
       }
@@ -825,6 +1415,14 @@ function applySharedSnapshot(data){
   }
 
   state=nextState;
+  if(data.party_demand){
+    partyDemandSnapshot=data.party_demand;
+    partyDemandReady=true;
+  }
+  setManualOrderOverrides(formatManualOrderOverrides(
+    data.snapshot && data.snapshot.order_overrides
+  ));
+  ensureScheduledOrderOverrides();
   sharedSnapshotId=String(data.snapshot.id);
   sharedSyncReady=true;
   hasUnsavedChanges=false;
@@ -852,6 +1450,7 @@ async function loadSharedSnapshot(opts={}){
     applySharedSnapshot(data);
     setSaveStatus(`Synced ${snapshotTimeLabel(data.snapshot)}`);
     if(force) showToast('Loaded the latest shared inventory count.');
+    return data;
   }catch(e){
     sharedSyncReady=false;
     updateStats();
@@ -879,8 +1478,9 @@ function buildVendorPanel(){
       const oh=getOnHand(item.id);
       const qty=calculatedOrderQty(item,oh);
       if(qty>0){
-        if(!vendorMap[item.vendor]) vendorMap[item.vendor]=[];
-        vendorMap[item.vendor].push({...item, orderQty:qty});
+        const vendorLabel=inventoryVendorLabel(item);
+        if(!vendorMap[vendorLabel]) vendorMap[vendorLabel]=[];
+        vendorMap[vendorLabel].push({...item, orderQty:qty});
       }
     }
   }
@@ -905,6 +1505,9 @@ function buildVendorPanel(){
 function resetAll(){
   if(!confirm('Clear all on-hand counts and start over?')) return;
   state={};
+  setManualOrderOverrides('');
+  const manualOverrides=document.getElementById('manualOrderOverridesText');
+  if(manualOverrides) manualOverrides.value='';
   hasUnsavedChanges=true;
   saveState();
   setSaveStatus('Unsaved changes');
@@ -915,7 +1518,7 @@ function resetAll(){
       const oq=document.getElementById(`oq-${item.id}`);
       if(oq){
         const qty=calculatedOrderQty(item,'');
-        oq.textContent=item.eventDriven ? qty : qty===null ? '–' : qty;
+        oq.textContent=qty===null ? '–' : qty===0 ? '✓' : formatQty(qty);
         oq.className=`order-qty ${qty===null?'empty':qty>0?'positive':'zero'}`;
       }
       const card=document.getElementById(`card-${item.id}`);
@@ -1004,17 +1607,49 @@ async function generateOrder(){
     return;
   }
 
+  btn.innerHTML = '<span class="spin"></span> Refreshing Item Master prices…';
+  const pricingResult=await syncInventoryPrices({beforeOrder:true});
+  if(!pricingResult){
+    showToast('Order blocked: current Item Master prices could not be loaded.',true,9000);
+    btn.innerHTML = '🚀 Generate Order';
+    updateStats();
+    return;
+  }
+
+  btn.innerHTML = '<span class="spin"></span> Refreshing parties…';
+  const refreshedParty=await refreshPartyDemand({beforeOrder:true});
+  if(!refreshedParty){
+    btn.innerHTML = '🚀 Generate Order';
+    updateStats();
+    return;
+  }
+  const partyBlocks=refreshedParty.blocking_warnings || [];
+  const overrideReady=partyBlocks.length>0 && partyOverrideEnabled && partyOverrideReason.trim() && refreshedParty.id!==null && refreshedParty.id!==undefined;
+  if(partyBlocks.length && !overrideReady){
+    showToast('Order blocked: review Party Demand warnings or enter a manager emergency override reason.',true,9000);
+    btn.innerHTML = '🚀 Generate Order';
+    updateStats();
+    return;
+  }
+
+  let orderOverrides={};
+  try{
+    orderOverrides=parseManualOrderOverrides();
+  }catch(error){
+    showToast('Order blocked: '+error.message,true,9000);
+    btn.innerHTML = '🚀 Generate Order';
+    updateStats();
+    return;
+  }
+
   // Collect on-hand counts: {itemName: onHandValue}
   const counts = {};
-  const eventOrders = {};
   for(const cat of CATEGORIES){
     for(const item of cat.items){
       const oh = getOnHand(item.id);
       if(oh !== '' && oh !== undefined && oh !== null){
         counts[item.name] = parseFloat(oh);
       }
-      const eventQty=activeEventOrderQty(item);
-      if(eventQty>0) eventOrders[item.name]=eventQty;
     }
   }
 
@@ -1023,33 +1658,35 @@ async function generateOrder(){
   btn.setAttribute('disabled','');
 
   try {
-    const resp = await fetch('/api/generate_order', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        counts,
-        eventOrders,
-        truckCycle:currentTruckCycle(),
-      }),
-    });
-
-    if(!resp.ok){
-      const err = await resp.json().catch(()=>({error:'Unknown server error'}));
-      showToast('❌ Error: ' + (err.error || resp.statusText), true, 8000);
-    } else {
-      // API returns full HTML — open it in a new tab via Blob URL
-      const html = await resp.text();
-      const reportBase = new URL('/', resp.url).href;
-      const reportHtml = html.replace(
-        /<head>/i,
-        `<head><base href="${reportBase}">`
-      );
-      const blob = new Blob([reportHtml], {type:'text/html;charset=utf-8'});
-      const url  = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      showToast('✅ Weekly order generated!');
-      await syncAfterGeneratedOrder();
-    }
+    const payload={
+      counts,
+      truckCycle:activeTruckCycle(),
+      partySnapshotId:partyDemandSnapshot && partyDemandSnapshot.id,
+      partyOverride:{
+        enabled:!!overrideReady,
+        reason:overrideReady ? partyOverrideReason.trim() : '',
+      },
+      orderOverrides,
+    };
+    const targetName=`weekly-order-${Date.now()}`;
+    const reportWindow=window.open('',targetName);
+    if(!reportWindow) throw new Error('Allow pop-ups for FoodOrder, then try again.');
+    const form=document.createElement('form');
+    form.method='POST';
+    form.action='/api/generate_order';
+    form.target=targetName;
+    form.style.display='none';
+    const input=document.createElement('input');
+    input.type='hidden';
+    input.name='payload';
+    input.value=JSON.stringify(payload);
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+    showToast('✅ Weekly order is generating in a review tab.');
+    await new Promise(resolve=>setTimeout(resolve,1800));
+    await syncAfterGeneratedOrder();
   } catch(e) {
     showToast('❌ Request failed: ' + e.message, true, 8000);
   }
@@ -1061,17 +1698,23 @@ async function generateOrder(){
 
 // ── Init ────────────────────────────────────────────────
 loadState();
+ensureScheduledOrderOverrides();
 renderSidebar();
 renderContent();
 updateStats();
-loadSharedSnapshot();
+async function initializeSheet(){
+  await Promise.all([
+    loadSharedSnapshot(),
+    syncInventoryPrices(),
+  ]);
+  await refreshPartyDemand();
+}
+initializeSheet();
 
 const currentDate=new Date();
 document.getElementById('dateLabel').textContent =
   currentDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-const cycleStatus=document.getElementById('cycleStatus');
-cycleStatus.textContent=currentCycleLabel(currentDate);
-cycleStatus.classList.toggle('friday',currentTruckCycle(currentDate)==='friday');
+updateCycleControls();
 
 // Highlight active sidebar section on scroll
 function observeSections(){

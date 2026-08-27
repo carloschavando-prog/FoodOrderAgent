@@ -15,17 +15,28 @@ import os
 import re
 import datetime
 import urllib.request
+import urllib.parse
+import uuid
+import html as html_lib
 from collections import defaultdict
 from http.server import BaseHTTPRequestHandler
 
 from order_normalization import (
     cases_required,
     count_unit_for_item,
-    extended_cost,
     pricing_matches_item_requirements,
     units_per_case,
 )
-from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, par_for_delivery
+from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, REMOVED_ITEM_NAMES, par_for_delivery
+from order_feedback import build_order_decisions
+from party_demand import (
+    PartyDemandBlocked,
+    party_need_by_item,
+    record_manager_override,
+    refresh_party_demand,
+    require_safe_snapshot,
+)
+from vendor_restrictions import vendor_allowed_for_item
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -38,8 +49,18 @@ SB_HDRS = {
     "Accept":        "application/json",
 }
 
-BROADLINER_IDS = [1, 2, 3, 4]
+# GFS (vendor 4) is temporarily archived. Its pricing, order history, and
+# integration code remain intact so it can be restored without data loss.
+BROADLINER_IDS = [1, 2, 3]
+ARCHIVED_BROADLINER_IDS = {4}
 VENDOR_NAMES   = {1: "US Foods", 2: "PFG", 3: "Sysco", 4: "GFS"}
+OTHER_VENDOR_NAMES = {5: "I Supply", 6: "Markets Depot", 7: "Meat Church"}
+VENDOR_IDS_BY_NAME = {
+    "us foods": 1,
+    "usf": 1,
+    "pfg": 2,
+    "sysco": 3,
+}
 VENDOR_ABBR    = {1: "USF",      2: "PFG", 3: "SYC",   4: "GFS"}
 VENDOR_COLOR   = {
     1: ("#0f8f4f", "#dff5e9"),
@@ -76,21 +97,191 @@ MIN_RESCUE_SAVINGS = 25.0
 LOW_FILLER_SPEND_LIMIT = 50.0
 
 REQUIRED_VENDOR_BY_ITEM = {
+    "aluminum 1/3 pans": 1,
+    "dishmachine detergent": 1,
+    "low temp sanitizer": 1,
+    "mozzarella sticks": 1,
     "pot & pan detergent": 1,
     "pre soak": 1,
+    "quat sanitizer": 1,
     "heavy duty rinse additive": 1,
     "sanitizing floor cleaner": 1,
+    "solid dish detergent": 1,
 }
-
-HOUSE_BUILT_ITEM_NAMES = {"simple syrup"}
 
 INVENTORY_NAME_ALIASES = {
     "napkins c fold": "napkins xpressnap",
 }
 
+SPECIAL_ORDER_DELIVERY_DATE = "2026-08-25"
+SPECIAL_ORDER_BROADLINER_IDS = {1, 2}  # US Foods + PFG
+SPECIAL_ORDER_OVERRIDES = {
+    'Tortilla, Flour 12"': {"quantity": 0, "mode": "cases"},
+    'Tortilla, Flour 6"': {"quantity": 0, "mode": "cases"},
+    "Garlic Parmesan": {"quantity": 0, "mode": "cases"},
+    "Shortening": {"quantity": 0, "mode": "cases"},
+    "Styrofoam To-Go Containers": {"quantity": 0, "mode": "cases"},
+    "Napkins C Fold": {"quantity": 0, "mode": "cases"},
+    "Double Lobe Chicken Breasts": {"quantity": 0, "mode": "cases"},
+    "Oranges": {"quantity": 0, "mode": "cases"},
+    "Diced Tomatoes": {"quantity": 0, "mode": "cases"},
+    "Diced Red Onions": {"quantity": 0, "mode": "cases"},
+    "Ranch Dressing": {"quantity": 0, "mode": "cases"},
+    "Pickles": {"quantity": 0, "mode": "cases"},
+    "Bacon Toppings": {"quantity": 0, "mode": "cases"},
+    "Green Scrubbies": {"quantity": 0, "mode": "cases"},
+    "Crushed Red Pepper Packets": {"quantity": 0, "mode": "cases"},
+    "Premium Buttery Pan & Grill": {"quantity": 1, "mode": "cases"},
+    "Fire Roasted Salsa": {"quantity": 1, "mode": "cases"},
+    "Pizza Cheese": {"quantity": 1, "mode": "cases"},
+    "Sour Cream": {"quantity": 1, "mode": "cases"},
+    "M Nitrile Gloves": {"quantity": 1, "mode": "cases"},
+    "Sliced Red Tomatoes": {"quantity": 2, "mode": "cases"},
+    "Tenders": {"quantity": 5, "mode": "cases", "vendorId": 1},
+    "Fries": {"quantity": 6, "mode": "cases", "vendorId": 2},
+    "24 Ounce Pretzel": {
+        "quantity": 4,
+        "mode": "minimum_cases",
+        "required_pack": "24 oz",
+    },
+}
+
 def canonical_inventory_name(name):
     normalized = name.lower().strip()
     return INVENTORY_NAME_ALIASES.get(normalized, normalized)
+
+
+def preferred_vendor_name(vendor_id):
+    if vendor_id in BROADLINER_IDS:
+        return VENDOR_NAMES[vendor_id]
+    if vendor_id in ARCHIVED_BROADLINER_IDS:
+        return "Select active vendor"
+    return OTHER_VENDOR_NAMES.get(vendor_id, f"Vendor {vendor_id}")
+
+
+def order_overrides_for_delivery(delivery_date, manager_overrides=None):
+    """Merge one-time delivery instructions over any manager-entered values."""
+    merged = {}
+    if manager_overrides not in (None, {}):
+        if not isinstance(manager_overrides, dict):
+            raise ValueError("orderOverrides must be an object keyed by item name.")
+        merged.update(manager_overrides)
+    if str(delivery_date or "") == SPECIAL_ORDER_DELIVERY_DATE:
+        merged.update({
+            name: dict(spec)
+            for name, spec in SPECIAL_ORDER_OVERRIDES.items()
+        })
+    return merged
+
+
+def broadliner_ids_for_delivery(delivery_date):
+    """Return any delivery-specific broadliner consolidation rule."""
+    if str(delivery_date or "") == SPECIAL_ORDER_DELIVERY_DATE:
+        return set(SPECIAL_ORDER_BROADLINER_IDS)
+    return set(BROADLINER_IDS)
+
+
+def _pack_matches_requirement(pricing, required_pack):
+    expected = re.sub(r"[^a-z0-9]", "", str(required_pack or "").lower())
+    actual = re.sub(r"[^a-z0-9]", "", str(pricing.get("pack_size") or "").lower())
+    return bool(expected and expected in actual)
+
+
+def apply_order_overrides(canonical_items, best_prices, overrides):
+    """Apply manager-requested final order quantities without altering inventory."""
+    if overrides in (None, {}):
+        return
+    if not isinstance(overrides, dict):
+        raise ValueError("orderOverrides must be an object keyed by item name.")
+
+    items_by_name = {
+        canonical_inventory_name(item["name"]): item
+        for item in canonical_items
+    }
+    for raw_name, raw_spec in overrides.items():
+        name = canonical_inventory_name(str(raw_name))
+        item = items_by_name.get(name)
+        if item is None:
+            raise ValueError(f"Unknown manual order override item: {raw_name}")
+
+        spec = raw_spec if isinstance(raw_spec, dict) else {"quantity": raw_spec}
+        try:
+            quantity = float(spec.get("quantity"))
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid manual order quantity for {item['name']}.")
+        if not math.isfinite(quantity) or quantity < 0:
+            raise ValueError(f"Manual order quantity for {item['name']} must be zero or greater.")
+
+        mode = str(spec.get("mode") or "cases").lower().strip()
+        if mode not in {"cases", "minimum_cases", "count_unit"}:
+            raise ValueError(
+                f"Manual order mode for {item['name']} must be cases, "
+                "minimum_cases, or count_unit."
+            )
+        if mode in {"cases", "minimum_cases"} and not quantity.is_integer():
+            raise ValueError(f"Manual case quantity for {item['name']} must be a whole number.")
+
+        required_pack = str(spec.get("required_pack") or "").strip()
+        if required_pack and quantity > 0:
+            compatible_prices = {
+                vendor_id: pricing
+                for vendor_id, pricing in best_prices.get(item["id"], {}).items()
+                if _pack_matches_requirement(pricing, required_pack)
+            }
+            if not compatible_prices:
+                raise ValueError(
+                    f"{item['name']} requires the {required_pack} pack, but no "
+                    "compatible vendor quote is available."
+                )
+            best_prices[item["id"]] = compatible_prices
+
+        vendor_value = spec.get("vendorId", spec.get("vendor_id"))
+        vendor_id = None
+        if vendor_value not in (None, ""):
+            if isinstance(vendor_value, str) and not vendor_value.strip().isdigit():
+                vendor_id = VENDOR_IDS_BY_NAME.get(vendor_value.lower().strip())
+            else:
+                try:
+                    vendor_id = int(vendor_value)
+                except (TypeError, ValueError):
+                    vendor_id = None
+            if vendor_id in ARCHIVED_BROADLINER_IDS:
+                raise ValueError(
+                    f"{VENDOR_NAMES[vendor_id]} is temporarily archived and "
+                    f"cannot be forced for {item['name']}."
+                )
+            if vendor_id not in BROADLINER_IDS:
+                raise ValueError(f"Unknown forced vendor for {item['name']}.")
+            if not vendor_allowed_for_item(item["name"], vendor_id):
+                raise ValueError(
+                    f"{item['name']} cannot be forced to {VENDOR_NAMES[vendor_id]}: "
+                    "that supplier is excluded for this item."
+                )
+            price = best_prices.get(item["id"], {}).get(vendor_id)
+            if quantity > 0 and (
+                not price or not str(price.get("apn") or "").strip()
+            ):
+                raise ValueError(
+                    f"{item['name']} cannot be forced to {VENDOR_NAMES[vendor_id]}: "
+                    "no compatible vendor item number is available."
+                )
+
+        item["manual_override"] = True
+        item["manual_override_mode"] = mode
+        item["manual_override_quantity"] = quantity
+        item["manual_override_required_pack"] = required_pack
+        item["calculated_order_qty"] = item.get("order_qty", 0)
+        if mode == "cases":
+            item["manual_case_qty"] = int(quantity)
+            item["order_qty"] = quantity
+        elif mode == "minimum_cases":
+            item["minimum_case_qty"] = int(quantity)
+            if quantity > 0 and item.get("order_qty", 0) <= 0:
+                item["order_qty"] = 1
+        else:
+            item["order_qty"] = quantity
+        if vendor_id is not None:
+            item["forced_vendor_id"] = vendor_id
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
 
@@ -112,7 +303,12 @@ def sb_get_all(path, page_size=1000):
             return rows
         offset += page_size
 
-def save_inventory_snapshot(on_hand, canonical_items):
+def save_inventory_snapshot(
+    on_hand,
+    canonical_items,
+    party_demand_snapshot_id=None,
+    order_overrides=None,
+):
     """
     Persist the inventory count to Supabase for food cost tracking.
     Creates one inventory_snapshots row + one inventory_snapshot_items row per item.
@@ -129,7 +325,11 @@ def save_inventory_snapshot(on_hand, canonical_items):
         # 1. Create snapshot header row
         req = urllib.request.Request(
             f"{SB_URL}/rest/v1/inventory_snapshots",
-            data=json.dumps({"notes": "Auto-saved from weekly order generation"}).encode(),
+            data=json.dumps({
+                "notes": "Auto-saved from weekly order generation",
+                "party_demand_snapshot_id": party_demand_snapshot_id,
+                "order_overrides": order_overrides or {},
+            }).encode(),
             headers=hdrs, method="POST"
         )
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -176,10 +376,10 @@ def save_inventory_snapshot(on_hand, canonical_items):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_data(on_hand, truck_cycle="friday", event_orders=None):
+def load_data(on_hand, truck_cycle="friday", party_need=None, load_prices=True):
     """
     on_hand: {item_name_lower: float}  — on-hand count from inventory sheet
-    event_orders: explicit count-unit additions for the active delivery cycle
+    party_need: converted inventory-count-unit requirements from Event Kitchen
     Returns canonical_items list + best_prices dict
     """
     normalized_on_hand = {}
@@ -191,15 +391,15 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
         ):
             normalized_on_hand[canonical_name] = qty
 
-    normalized_event_orders = {}
-    for name, qty in (event_orders or {}).items():
+    normalized_party_need = {}
+    for name, qty in (party_need or {}).items():
         canonical_name = canonical_inventory_name(name)
         try:
             numeric_qty = float(qty)
         except (TypeError, ValueError):
             continue
         if math.isfinite(numeric_qty) and numeric_qty > 0:
-            normalized_event_orders[canonical_name] = numeric_qty
+            normalized_party_need[canonical_name] = numeric_qty
 
     raw_items = sb_get_all(
         "items?select=id,name,category_id,pack_size,par_level,"
@@ -210,6 +410,8 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
     id_to_item  = {}
     for row in raw_items:
         key = row["name"].lower().strip()
+        if key in REMOVED_ITEM_NAMES:
+            continue
         name_groups[key].append(row["id"])
         id_to_item[row["id"]] = row
 
@@ -223,15 +425,16 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
         par = 0.0 if event_driven or configured_par is None else configured_par
 
         oh = normalized_on_hand.get(lower_name)
-        event_qty = normalized_event_orders.get(lower_name, 0.0)
+        effective_on_hand = max(0.0, float(oh)) if oh is not None else None
+        party_qty = normalized_party_need.get(lower_name, 0.0)
         if event_driven:
-            qty = event_qty
-        elif oh is not None:
-            qty = max(0.0, math.ceil(par - float(oh))) + event_qty
+            qty = max(0.0, party_qty - effective_on_hand) if effective_on_hand is not None else party_qty
+        elif effective_on_hand is not None:
+            qty = max(0.0, par + party_qty - effective_on_hand)
         else:
             # The kitchen inventory sheet is authoritative. Database-only items
             # must not silently become orders when the staff could not count them.
-            qty = event_qty
+            qty = party_qty
 
         canonical_items.append({
             "id":            can_id,
@@ -240,6 +443,8 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
             "category_id":   item["category_id"],
             "pack_size":     item.get("pack_size") or "",
             "par_level":     par,
+            "on_hand":       effective_on_hand,
+            "party_need":    party_qty,
             "order_qty":     qty,
             "event_driven":  event_driven,
             "count_unit":    count_unit_for_item(item),
@@ -254,6 +459,9 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
         canonical_by_id[ci["id"]] = ci
         for iid in ci["all_ids"]:
             id_to_canonical[iid] = ci["id"]
+
+    if not load_prices:
+        return canonical_items, {}
 
     # Load pricing — newest write per (canonical_id, vendor_id) wins
     all_pricing = sb_get_all(
@@ -270,10 +478,14 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
         price = row.get("price")
         if price is None:
             continue
-        apn    = row.get("apn") or ""
+        apn = str(row.get("apn") or "").strip()
+        if not apn:
+            continue
         can_id = id_to_canonical.get(row["item_id"], row["item_id"])
         item = canonical_by_id.get(can_id)
         if item is None:
+            continue
+        if not vendor_allowed_for_item(item["name"], vid, apn):
             continue
         pricing = {
             "price": float(price),
@@ -293,6 +505,66 @@ def load_data(on_hand, truck_cycle="friday", event_orders=None):
 
     return canonical_items, dict(best_prices)
 
+
+def build_order_prices_from_item_master(
+    canonical_items,
+    item_master_items,
+    item_master_prices,
+):
+    """Convert the Item Master's approved quotes into optimizer price rows."""
+    from api.item_master import is_orderable_quote
+
+    order_items_by_name = {
+        canonical_inventory_name(item["name"]): item
+        for item in canonical_items
+    }
+    best_prices = defaultdict(dict)
+
+    for master_item in item_master_items:
+        item = order_items_by_name.get(
+            canonical_inventory_name(master_item["name"])
+        )
+        if item is None:
+            continue
+
+        for vendor_id, data in item_master_prices.get(master_item["id"], {}).items():
+            if vendor_id not in BROADLINER_IDS or not is_orderable_quote(data):
+                continue
+            apn = str(data.get("apn") or "").strip()
+            if not apn or not vendor_allowed_for_item(item["name"], vendor_id, apn):
+                continue
+
+            pricing = {
+                "price": float(data["price"]),
+                "apn": apn,
+                "pack_size": data.get("pack_size") or "",
+                "unit_basis": data.get("unit_basis"),
+                "unit_quantity": data.get("unit_quantity"),
+                "unit_note": data.get("unit_note") or "",
+                "vendor_item_name": data.get("vendor_item_name") or "",
+                "price_checked_at": data.get("pulled_at"),
+            }
+            pricing["units_per_case"] = units_per_case(item, pricing)
+            if (
+                pricing["units_per_case"] is not None
+                and pricing_matches_item_requirements(item, pricing)
+            ):
+                best_prices[item["id"]][vendor_id] = pricing
+
+    return dict(best_prices)
+
+
+def load_order_prices_from_item_master(canonical_items):
+    """Reload the exact approved quote set displayed by /api/item_master."""
+    from api.item_master import load_data as load_item_master_data
+
+    item_master_items, item_master_prices = load_item_master_data()
+    return build_order_prices_from_item_master(
+        canonical_items,
+        item_master_items,
+        item_master_prices,
+    )
+
 # ── Optimizer ─────────────────────────────────────────────────────────────────
 
 def meets_minimum(vid, cases, spend):
@@ -304,14 +576,24 @@ def minimum_label(vid):
     return f"${min_val:,.0f}" if min_type == "dollars" else f"{min_val} cases"
 
 def required_vendor(item):
-    return REQUIRED_VENDOR_BY_ITEM.get(item["name"].lower().strip())
+    return item.get("forced_vendor_id") or REQUIRED_VENDOR_BY_ITEM.get(
+        item["name"].lower().strip()
+    )
+
+def case_quantity_for_item(item, pricing):
+    exact_cases = item.get("manual_case_qty")
+    if exact_cases is not None:
+        return exact_cases
+    calculated_cases = cases_required(item, pricing)
+    minimum_cases = item.get("minimum_case_qty")
+    if minimum_cases is None:
+        return calculated_cases
+    return max(calculated_cases or 0, minimum_cases)
 
 def assign_cheapest(canonical_items, best_prices, active):
     assignment = {}
     for ci in canonical_items:
         if ci["order_qty"] <= 0:
-            continue
-        if ci["name"].lower().strip() in HOUSE_BUILT_ITEM_NAMES:
             continue
         required_vid = required_vendor(ci)
         if required_vid is not None:
@@ -319,21 +601,31 @@ def assign_cheapest(canonical_items, best_prices, active):
                 required_vid in active
                 and ci["id"] in best_prices
                 and required_vid in best_prices[ci["id"]]
+                and vendor_allowed_for_item(ci["name"], required_vid)
+                and str(best_prices[ci["id"]][required_vid].get("apn") or "").strip()
             ):
                 assignment[ci["id"]] = required_vid
             continue
         opts = {
             v: best_prices[ci["id"]][v]
             for v in active
-            if ci["id"] in best_prices and v in best_prices[ci["id"]]
+            if (
+                ci["id"] in best_prices
+                and v in best_prices[ci["id"]]
+                and vendor_allowed_for_item(ci["name"], v)
+                and str(best_prices[ci["id"]][v].get("apn") or "").strip()
+            )
         }
         if opts:
             assignment[ci["id"]] = min(
-                opts, key=lambda v: extended_cost(ci, opts[v])
+                opts,
+                key=lambda v: case_quantity_for_item(ci, opts[v]) * opts[v]["price"],
             )
     return assignment
 
 def filler_cap(item):
+    if item.get("manual_override"):
+        return 0
     name = item["name"].lower()
     if "glove" in name:
         return 2
@@ -390,7 +682,7 @@ def calc_totals(assignment, items_by_id, best_prices, filler_cases=None):
 
     for can_id, vid in assignment.items():
         item = items_by_id[can_id]
-        cases = cases_required(item, best_prices[can_id][vid])
+        cases = case_quantity_for_item(item, best_prices[can_id][vid])
         if cases is None:
             continue
         add_entry(can_id, vid, cases, 0)
@@ -445,6 +737,8 @@ def build_rescue_fillers(vid, canonical_items, best_prices, assignment, filler_c
 
     candidates = []
     for ci in canonical_items:
+        if not vendor_allowed_for_item(ci["name"], vid):
+            continue
         required_vid = required_vendor(ci)
         if required_vid is not None and required_vid != vid:
             continue
@@ -542,11 +836,18 @@ def rescue_note(vid, plan, savings_vs_drop, items_by_id):
         f"to meet {minimum_label(vid)}; {comparison}."
     )
 
-def optimize_basket(canonical_items, best_prices):
+def optimize_basket(canonical_items, best_prices, active_vendors=None):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
-    active = set(BROADLINER_IDS)
+    active = set(BROADLINER_IDS if active_vendors is None else active_vendors)
     notes  = []
-    dropped = set()
+    dropped = set(BROADLINER_IDS) - active
+    if dropped:
+        kept_names = ", ".join(VENDOR_NAMES[vid] for vid in sorted(active))
+        dropped_names = ", ".join(VENDOR_NAMES[vid] for vid in sorted(dropped))
+        notes.append(
+            f"Broadliner consolidation: limited this order to {kept_names}; "
+            f"excluded {dropped_names} to reduce minimum filler."
+        )
     filler_cases = {}
     assignment = {}
     required_vids = {
@@ -644,13 +945,13 @@ def compute_savings(assignment, canonical_items, best_prices):
             }
         if not prices:
             continue
-        paid_cases = cases_required(item, prices[vid])
+        paid_cases = case_quantity_for_item(item, prices[vid])
         if paid_cases is None:
             continue
         paid_price = prices[vid]["price"]
         paid_total = paid_cases * paid_price
         all_prices = {v: d["price"] for v, d in prices.items()}
-        all_cases = {v: cases_required(item, d) for v, d in prices.items()}
+        all_cases = {v: case_quantity_for_item(item, d) for v, d in prices.items()}
         all_totals = {
             v: all_cases[v] * d["price"]
             for v, d in prices.items()
@@ -712,13 +1013,18 @@ tr.cat-header td{background:#f8f9fa;font-weight:700;font-size:.72rem;text-transf
 .manual-card{background:var(--card);border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.1);overflow:hidden}
 .manual-header{background:#495057;color:#fff;padding:12px 18px;font-size:1rem;font-weight:700}
 .savings-card{background:var(--card);border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.1);overflow:hidden}
+.party-card{background:var(--card);border:1px solid #9fc9cf;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.1);overflow:hidden}
+.party-header{background:#0d5662;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+.party-header h2{font-size:1rem;margin-bottom:3px}.party-header p{font-size:.78rem;opacity:.85}
+.party-events{padding:10px 18px;border-top:1px solid var(--border);font-size:.78rem;color:var(--muted)}
+.party-warning{background:#fff3cd;color:#664d03;padding:9px 18px;border-top:1px solid #ffc107;font-size:.8rem}
 .savings-header{background:#1a1a2e;color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center}
 .savings-header h2{font-size:1rem;font-weight:700}
 .savings-total{font-size:1.1rem;font-weight:700;color:#4ade80}
 td.save-pos{color:#198754;font-weight:600}
 td.save-zero{color:var(--muted)}
 .pill{display:inline-block;padding:1px 6px;border-radius:10px;font-size:.7rem;font-weight:600;margin:1px}
-@media print{body{background:#fff}.vendor-card,.manual-card,.savings-card{box-shadow:none;border:1px solid #ddd}.content{padding:8px;gap:12px}}
+@media print{body{background:#fff}.vendor-card,.manual-card,.savings-card,.party-card{box-shadow:none;border:1px solid #ddd}.content{padding:8px;gap:12px}.order-btn{display:none}}
 .order-btn{background:#198754;color:#fff;border:none;padding:9px 22px;border-radius:8px;font-size:.88rem;font-weight:700;cursor:pointer;letter-spacing:.02em;white-space:nowrap}
 .order-btn:hover{background:#146c43}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center}
@@ -752,6 +1058,10 @@ def fmt_count_unit(unit, qty):
     return {
         "10-liter box": "10-liter boxes",
         "5-pound bag": "5-pound bags",
+        "2-pound bag": "2-pound bags",
+        "5-pound tub": "5-pound tubs",
+        "68-ounce container": "68-ounce containers",
+        "pack": "packs",
         "5-pound pack": "5-pound packs",
         "1/2-gallon jar": "1/2-gallon jars",
         "#10 can": "#10 cans",
@@ -769,7 +1079,8 @@ def vendor_pill(vid):
 
 def build_html(assignment, dropped, unassigned, notes,
                canonical_items, best_prices, savings_rows, total_saved,
-               filler_cases=None):
+               filler_cases=None, inventory_snapshot_id=None,
+               party_snapshot=None, manager_override_reason=None):
     items_by_id = {ci["id"]: ci for ci in canonical_items}
     vendor_items, vendor_cases, vendor_spend = calc_totals(
         assignment, items_by_id, best_prices, filler_cases or {}
@@ -777,14 +1088,33 @@ def build_html(assignment, dropped, unassigned, notes,
 
     # ── Build per-vendor order payload for "Place Orders" button ─────────────
     _order_data = {}
+    _order_lines = []
+    _selected_product_ids = set()
     for _vid in BROADLINER_IDS:
         _entries = vendor_items.get(_vid, [])
         _vi = []
         for _e in _entries:
             _apn = (_e.get("apn") or "").strip()
             if not _apn:
-                continue
+                raise ValueError(
+                    f'Cannot submit {_e["item"]["name"]}: '
+                    f'{VENDOR_NAMES[_vid]} has no vendor item number.'
+                )
+            _selected_product_ids.add(_e["item"]["id"])
             _qty = _e["cases"]
+            _order_lines.append({
+                "canonical_product_key": str(_e["item"]["id"]),
+                "item_id": _e["item"]["id"],
+                "supplier_id": _vid,
+                "item_name": _e["item"]["name"],
+                "supplier_item_number": _apn,
+                "description": _e["item"].get("pack_size") or "",
+                "cases_ordered": _qty,
+                "base_cases": _e.get("base_cases", _qty),
+                "filler_cases": _e.get("filler_cases", 0),
+                "unit_price": _e.get("price"),
+                "line_total": _e.get("subtotal"),
+            })
             if _vid == 1:    # US Foods — productNumber (numeric)
                 try:    _vi.append({"productNumber": int(_apn), "qty": _qty})
                 except: _vi.append({"productNumber": _apn,     "qty": _qty})
@@ -797,9 +1127,37 @@ def build_html(assignment, dropped, unassigned, notes,
         if _vi:
             _order_data[str(_vid)] = _vi
     _order_data_json = json.dumps(_order_data, separators=(",", ":"))
-    _vnames_json     = json.dumps({str(k): v for k, v in VENDOR_NAMES.items()})
+    _vnames_json     = json.dumps({str(k): VENDOR_NAMES[k] for k in BROADLINER_IDS})
 
     now        = datetime.datetime.now()
+    _feedback_order_id = str(uuid.uuid4())
+    _feedback_decisions = build_order_decisions(
+        canonical_items,
+        best_prices,
+        assignment,
+        dropped,
+        included_product_ids=_selected_product_ids,
+        required_vendor_by_item=REQUIRED_VENDOR_BY_ITEM,
+    )
+    _feedback_context = {
+        "order_id": _feedback_order_id,
+        "order_date": now.date().isoformat(),
+        "inventory_snapshot_id": inventory_snapshot_id,
+        "party_demand_snapshot_id": (party_snapshot or {}).get("id"),
+        "party_demand_override_reason": manager_override_reason,
+        "expected_supplier_ids": sorted(int(vid) for vid in _order_data),
+        "item_total": len(_selected_product_ids),
+        "case_total": sum(
+            float(line.get("qty") or 0)
+            for lines in _order_data.values()
+            for line in lines
+        ),
+        "order_lines": _order_lines,
+        "decisions": _feedback_decisions,
+    }
+    _feedback_context_json = json.dumps(
+        _feedback_context, separators=(",", ":")
+    ).replace("</", "<\\/")
     date_str   = now.strftime("%A, %B %d, %Y")
     time_str   = now.strftime("%I:%M %p")
     grand      = sum(vendor_spend.values())
@@ -864,6 +1222,109 @@ def build_html(assignment, dropped, unassigned, notes,
 
     h.append('</div>\n<div class="content">\n')
 
+    if party_snapshot:
+        delivery = party_snapshot.get("delivery_date") or "—"
+        coverage_start = party_snapshot.get("coverage_start") or "—"
+        coverage_end = party_snapshot.get("coverage_end") or "—"
+        events = party_snapshot.get("event_audit") or []
+        status = "Manager override recorded" if manager_override_reason else "Live source checked"
+        h.append(
+            '<div class="party-card"><div class="party-header">'
+            '<div><h2>Party Demand</h2>'
+            f'<p>Delivery {html_lib.escape(str(delivery))} · Coverage '
+            f'{html_lib.escape(str(coverage_start))} through '
+            f'{html_lib.escape(str(coverage_end))} · {len(events)} definite '
+            f'{"party" if len(events) == 1 else "parties"}</p></div>'
+            f'<strong>{html_lib.escape(status)}</strong></div>'
+        )
+        party_items = party_snapshot.get("item_totals") or []
+        if party_items:
+            h.append(
+                '<table><thead><tr><th>Party item</th><th class="r">Raw</th>'
+                '<th class="r">With 10% buffer</th><th class="r">Inventory need</th>'
+                '</tr></thead><tbody>'
+            )
+            for item in party_items:
+                h.append(
+                    '<tr>'
+                    f'<td class="item-name">{html_lib.escape(str(item.get("inventory_item") or ""))}'
+                    f'<div style="font-weight:400;color:var(--muted);font-size:.72rem">'
+                    f'{html_lib.escape(str(item.get("conversion_note") or ""))}</div></td>'
+                    f'<td class="r">{fmt_qty(item.get("raw_quantity") or 0)} '
+                    f'{html_lib.escape(str(item.get("raw_unit") or ""))}</td>'
+                    f'<td class="r">{fmt_qty(item.get("buffered_quantity") or 0)} '
+                    f'{html_lib.escape(str(item.get("buffered_unit") or ""))}</td>'
+                    f'<td class="r"><strong>{fmt_qty(item.get("converted_quantity") or 0)} '
+                    f'{html_lib.escape(str(item.get("inventory_unit") or ""))}</strong></td>'
+                    '</tr>'
+                )
+            h.append('</tbody></table>')
+        event_text = "; ".join(
+            f'{event.get("event_name")} ({event.get("event_date")})'
+            for event in events
+        ) or "No definite parties in this coverage window."
+        h.append(
+            f'<div class="party-events"><strong>Included events:</strong> '
+            f'{html_lib.escape(event_text)}</div>'
+        )
+        if manager_override_reason:
+            h.append(
+                '<div class="party-warning"><strong>Manager override:</strong> '
+                f'{html_lib.escape(str(manager_override_reason))}</div>'
+            )
+        h.append('</div>')
+
+    manager_overrides = [
+        item for item in canonical_items if item.get("manual_override")
+    ]
+    if manager_overrides:
+        h.append(
+            '<div class="manual-card"><div class="manual-header">'
+            '✏️ Manager Order Overrides</div>'
+            '<table><thead><tr><th>Item</th><th class="c">System need</th>'
+            '<th class="c">Manager final</th><th>Vendor instruction</th>'
+            '</tr></thead><tbody>'
+        )
+        for item in sorted(manager_overrides, key=lambda row: row["name"].lower()):
+            quantity = item.get("manual_override_quantity", 0)
+            if item.get("manual_override_mode") == "cases":
+                final_text = (
+                    "Do not order"
+                    if quantity == 0
+                    else f'{fmt_qty(quantity)} {"case" if quantity == 1 else "cases"}'
+                )
+            elif item.get("manual_override_mode") == "minimum_cases":
+                pack_text = (
+                    f' ({item["manual_override_required_pack"]} only)'
+                    if item.get("manual_override_required_pack") else ""
+                )
+                final_text = (
+                    f'At least {fmt_qty(quantity)} '
+                    f'{"case" if quantity == 1 else "cases"}{pack_text}'
+                )
+            else:
+                final_text = (
+                    "Do not order"
+                    if quantity == 0
+                    else f'{fmt_qty(quantity)} '
+                    f'{fmt_count_unit(item.get("count_unit", "unit"), quantity)}'
+                )
+            vendor_text = (
+                f'{VENDOR_NAMES[item["forced_vendor_id"]]} only'
+                if item.get("forced_vendor_id")
+                else "Optimizer selects compatible vendor"
+            )
+            h.append(
+                '<tr>'
+                f'<td class="item-name">{html_lib.escape(item["name"])}</td>'
+                f'<td class="c">{fmt_qty(item.get("calculated_order_qty") or 0)} '
+                f'{html_lib.escape(fmt_count_unit(item.get("count_unit", "case"), item.get("calculated_order_qty") or 0))}</td>'
+                f'<td class="c"><strong>{html_lib.escape(final_text)}</strong></td>'
+                f'<td>{html_lib.escape(vendor_text)}</td>'
+                '</tr>'
+            )
+        h.append('</tbody></table></div>')
+
     if notes:
         h.append('<div class="consol-box"><strong>⚠️ Basket Consolidation Notes</strong>')
         for n in notes: h.append(f"<div>• {n}</div>")
@@ -909,7 +1370,20 @@ def build_html(assignment, dropped, unassigned, notes,
                     if filler_qty and e.get("base_cases", 0) else str(e["cases"])
                 )
                 coverage = ""
-                if item.get("count_unit") != "case":
+                if item.get("manual_override_mode") == "cases":
+                    coverage = (
+                        '<div style="color:#856404;font-size:.72rem">'
+                        f'Manager final: {fmt_qty(item["manual_case_qty"])} '
+                        f'{"case" if item["manual_case_qty"] == 1 else "cases"}</div>'
+                    )
+                elif item.get("manual_override_mode") == "minimum_cases":
+                    pack_text = item.get("manual_override_required_pack")
+                    coverage = (
+                        '<div style="color:#856404;font-size:.72rem">'
+                        f'Manager minimum: {fmt_qty(item["minimum_case_qty"])} cases'
+                        f'{" · " + html_lib.escape(pack_text) + " only" if pack_text else ""}</div>'
+                    )
+                elif item.get("count_unit") != "case":
                     units_per = e.get("units_per_case") or 0
                     base_cases = e.get("base_cases", 0)
                     coverage = (
@@ -919,8 +1393,37 @@ def build_html(assignment, dropped, unassigned, notes,
                         f'{fmt_qty(units_per)} per case; '
                         f'{fmt_qty(base_cases * units_per)} covered</div>'
                     )
-                h.append(f'<tr><td class="item-name">{item["name"]}{filler_badge}</td>'
-                         f'<td class="pack">{item["pack_size"]}{coverage}</td>'
+                demand_detail = (
+                    '<div style="color:var(--muted);font-size:.72rem">'
+                    f'PAR {fmt_qty(item.get("par_level") or 0)} · '
+                    f'On hand {fmt_qty(item.get("on_hand") or 0)} · '
+                    f'Party need {fmt_qty(item.get("party_need") or 0)} · '
+                    f'{"System need" if item.get("manual_override") else "Final need"} '
+                    f'{fmt_qty(item.get("calculated_order_qty") if item.get("manual_override") else item.get("order_qty") or 0)}'
+                    '</div>'
+                )
+                manual_badge = ""
+                if item.get("manual_override"):
+                    quantity = item.get("manual_override_quantity", 0)
+                    if item.get("manual_override_mode") == "cases":
+                        manual_text = f'{fmt_qty(quantity)} {"case" if quantity == 1 else "cases"}'
+                    elif item.get("manual_override_mode") == "minimum_cases":
+                        manual_text = f'minimum {fmt_qty(quantity)} cases'
+                        if item.get("manual_override_required_pack"):
+                            manual_text += f' · {item["manual_override_required_pack"]} only'
+                    else:
+                        manual_text = (
+                            f'{fmt_qty(quantity)} '
+                            f'{fmt_count_unit(item.get("count_unit", "unit"), quantity)}'
+                        )
+                    if item.get("forced_vendor_id"):
+                        manual_text += f' · {VENDOR_NAMES[item["forced_vendor_id"]]} only'
+                    manual_badge = (
+                        ' <span class="badge badge-warn">Manager override: '
+                        f'{html_lib.escape(manual_text)}</span>'
+                    )
+                h.append(f'<tr><td class="item-name">{item["name"]}{manual_badge}{filler_badge}</td>'
+                         f'<td class="pack">{item["pack_size"]}{coverage}{demand_detail}</td>'
                          f'<td class="apn c">{e["apn"] or "—"}</td>'
                          f'<td class="c">{cases_text}</td>'
                          f'<td class="r">{fmt_money(e["price"])}</td>'
@@ -933,7 +1436,6 @@ def build_html(assignment, dropped, unassigned, notes,
                  f'</div></div>')
 
     if unassigned:
-        other_vendors = {5: "I Supply", 6: "Markets Depot", 7: "Meat Church"}
         h.append('<div class="manual-card"><div class="manual-header">🛒 Manual / Other Vendors</div>'
                  '<table><thead><tr><th>Item</th><th>Pack</th><th class="c">Need</th>'
                  '<th>Preferred Vendor</th><th>Reason</th></tr></thead><tbody>')
@@ -944,22 +1446,14 @@ def build_html(assignment, dropped, unassigned, notes,
                 cat_name = dict(CAT_ORDER).get(ci["category_id"], "")
                 h.append(f'<tr class="cat-header"><td colspan="5">{cat_name}</td></tr>')
             pref_vid  = ci["preferred_vid"]
-            is_house_build = ci["name"].lower().strip() in HOUSE_BUILT_ITEM_NAMES
-            pref_name = (
-                "House Build"
-                if is_house_build
-                else VENDOR_NAMES.get(pref_vid)
-                or other_vendors.get(pref_vid, f"Vendor {pref_vid}")
-            )
+            pref_name = preferred_vendor_name(pref_vid)
             needed = (
                 f'{fmt_qty(ci["order_qty"])} '
                 f'{fmt_count_unit(ci.get("count_unit", "case"), ci["order_qty"])}'
                 if ci["order_qty"] > 0 else "?"
             )
             reason = (
-                "Build to PAR; not a vendor purchase"
-                if is_house_build
-                else "No compatible normalized case pack"
+                "No compatible normalized case pack"
                 if ci.get("count_unit") != "case"
                 else "No broadliner price on file"
             )
@@ -1025,16 +1519,29 @@ def build_html(assignment, dropped, unassigned, notes,
         )
     _modal_vendor_html = "\n".join(_modal_rows) if _modal_rows else \
         '<p style="color:#6c757d">No vendor items with APNs — cannot auto-place orders.</p>'
+    _modal_single_buttons = []
+    for _vid_text in sorted(_order_data, key=int):
+        _vid = int(_vid_text)
+        _vendor_name = VENDOR_NAMES[_vid]
+        _modal_single_buttons.append(
+            f'<button class="btn-submit order-submit-btn" '
+            f'onclick=\'submitOrders(["{_vid}"])\'>'
+            f'Place {_vendor_name} Only</button>'
+        )
+    _modal_single_buttons_html = "".join(_modal_single_buttons)
 
     _js = (
         "const ORDER_DATA=" + _order_data_json + ";\n"
         "const VENDOR_NAMES_MAP=" + _vnames_json + ";\n"
+        "const ORDER_FEEDBACK_CONTEXT=" + _feedback_context_json + ";\n"
         """const ORDER_ENDPOINTS={
   "1":"/api/place_order_usfoods",
   "2":"/api/place_order_pfg",
-  "3":"/api/place_order_sysco",
-  "4":"/api/place_order_gfs"
+  "3":"/api/place_order_sysco"
 };
+const ORDER_RESULTS={};
+let ORDER_FINALIZED=false;
+let ORDER_STAGED=false;
 function openOrderModal(){
   document.getElementById('order-modal').style.display='flex';
 }
@@ -1043,20 +1550,109 @@ function closeOrderModal(){
   document.getElementById('confirm-section').style.display='block';
   document.getElementById('progress-section').style.display='none';
   document.getElementById('done-actions').style.display='none';
-  var sb=document.getElementById('submit-btn');
-  if(sb) sb.disabled=false;
+  document.getElementById('progress-copy').textContent='Submitting orders in parallel…';
+  document.getElementById('save-draft-btn').disabled=false;
+  document.querySelectorAll('.order-submit-btn').forEach(function(button){
+    button.disabled=false;
+  });
 }
 function getOrderEndpoint(vid){
   return new URL(ORDER_ENDPOINTS[vid], document.baseURI).href;
 }
-async function submitOrders(){
-  var btn=document.getElementById('submit-btn');
-  if(btn) btn.disabled=true;
+function getFinalizeEndpoint(){
+  return new URL('/api/finalize_order', document.baseURI).href;
+}
+function getStageEndpoint(){
+  return new URL('/api/stage_order', document.baseURI).href;
+}
+async function stageGeneratedOrder(){
+  if(ORDER_STAGED) return;
+  var resp=await fetch(getStageEndpoint(),{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({order:ORDER_FEEDBACK_CONTEXT})
+  });
+  var data=await resp.json();
+  if(!resp.ok||!data.success) throw new Error(data.error||'Order staging failed');
+  ORDER_STAGED=true;
+}
+async function saveDraftOnly(){
+  var button=document.getElementById('save-draft-btn');
+  button.disabled=true;
   document.getElementById('confirm-section').style.display='none';
   document.getElementById('progress-section').style.display='block';
-  var vendors=Object.keys(ORDER_DATA);
+  document.getElementById('progress-copy').textContent='Saving the reviewed order to Supabase…';
   var container=document.getElementById('status-rows');
-  container.innerHTML='';
+  container.innerHTML='<div class="status-row"><span class="spin">⏳</span>&nbsp;'
+    +'<strong>Order draft:</strong> Saving item details…</div>';
+  try{
+    await stageGeneratedOrder();
+    container.innerHTML='<div class="status-row status-ok">✅ <strong>Order draft saved:</strong> '
+      +'Supabase has the reviewed order. No vendor orders were submitted.</div>';
+  }catch(e){
+    container.innerHTML='<div class="status-row status-err">❌ <strong>Draft not saved:</strong> '
+      +e.message+'. Check the Supabase server configuration and try again.</div>';
+    button.disabled=false;
+  }
+  document.getElementById('done-actions').style.display='flex';
+}
+async function finalizeCompletedOrder(){
+  var expected=Object.keys(ORDER_DATA);
+  var complete=expected.length>0&&expected.every(function(vid){
+    return ORDER_RESULTS[vid]&&ORDER_RESULTS[vid].success;
+  });
+  if(!complete||ORDER_FINALIZED) return;
+  var row=document.createElement('div');
+  row.id='feedback-finalize-status';
+  row.className='status-row';
+  row.innerHTML='<span class="spin">⏳</span>&nbsp;<strong>Pricing feedback:</strong> Saving final order and preparing dry-run previews…';
+  document.getElementById('status-rows').appendChild(row);
+  try{
+    var resp=await fetch(getFinalizeEndpoint(),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order:ORDER_FEEDBACK_CONTEXT,submissions:ORDER_RESULTS})
+    });
+    var data=await resp.json();
+    if(!resp.ok||!data.success) throw new Error(data.error||'Finalization failed');
+    ORDER_FINALIZED=true;
+    var prepared=(data.feedback||[]).filter(function(item){return item.status==='dry-run';}).length;
+    var skipped=(data.feedback||[]).filter(function(item){return item.status==='skipped';}).length;
+    row.className='status-row status-ok';
+    row.innerHTML='✅ <strong>Pricing feedback:</strong> Final order saved; '+prepared+
+      ' dry-run preview'+(prepared===1?'':'s')+' prepared; '+skipped+' skipped. No email was sent.';
+  }catch(e){
+    row.className='status-row status-err';
+    row.innerHTML='❌ <strong>Pricing feedback:</strong> '+e.message+
+      '. Vendor orders remain completed; retry feedback finalization separately.';
+  }
+}
+async function submitOrders(vendorIds){
+  document.querySelectorAll('.order-submit-btn').forEach(function(button){
+    button.disabled=true;
+  });
+  document.getElementById('confirm-section').style.display='none';
+  document.getElementById('progress-section').style.display='block';
+  document.getElementById('progress-copy').textContent='Submitting orders in parallel…';
+  var vendors=Array.isArray(vendorIds)&&vendorIds.length
+    ? vendorIds.filter(function(vid){return Object.prototype.hasOwnProperty.call(ORDER_DATA,vid);})
+    : Object.keys(ORDER_DATA);
+  vendors=vendors.filter(function(vid){return !(ORDER_RESULTS[vid]&&ORDER_RESULTS[vid].success);});
+  var container=document.getElementById('status-rows');
+  if(vendors.length){
+    container.innerHTML='<div id="order-stage-status" class="status-row">'
+      +'<span class="spin">⏳</span>&nbsp;<strong>Order record:</strong> Saving item details before submission…</div>';
+    try{
+      await stageGeneratedOrder();
+      container.innerHTML='<div class="status-row status-ok">✅ <strong>Order record:</strong> Item details saved.</div>';
+    }catch(e){
+      container.innerHTML='<div class="status-row status-err">❌ <strong>Order not submitted:</strong> '
+        +e.message+'. Check the Supabase server configuration and try again.</div>';
+      document.querySelectorAll('.order-submit-btn').forEach(function(button){button.disabled=false;});
+      document.getElementById('done-actions').style.display='flex';
+      return;
+    }
+  }
   vendors.forEach(function(vid){
     var row=document.createElement('div');
     row.id='vs-'+vid;
@@ -1075,6 +1671,7 @@ async function submitOrders(){
       });
       var data=await resp.json();
       if(data.success){
+        ORDER_RESULTS[vid]=data;
         var id=data.orderId||data.confirmationNumber||data.orderHeaderId||data.tandemOrderNumber||'';
         var deliv=data.deliveryDate?' · Delivery: '+data.deliveryDate:'';
         row.className='status-row status-ok';
@@ -1090,6 +1687,7 @@ async function submitOrders(){
     }
   });
   await Promise.all(promises);
+  await finalizeCompletedOrder();
   document.getElementById('done-actions').style.display='flex';
 }"""
     )
@@ -1097,7 +1695,7 @@ async function submitOrders(){
     h.append(
         '<div id="order-modal" class="modal-overlay">'
         '<div class="modal-box">'
-        '<div class="modal-title">🛒 Confirm &amp; Place All Orders</div>'
+        '<div class="modal-title">🛒 Review, Save &amp; Place Orders</div>'
         '<div id="confirm-section">'
         '<p style="color:#555;font-size:.88rem;margin-bottom:8px">'
         'Purchase orders will be submitted to the following vendors:</p>'
@@ -1108,11 +1706,14 @@ async function submitOrders(){
         '</div>'
         '<div class="modal-actions">'
         '<button class="btn-cancel" onclick="closeOrderModal()">Cancel</button>'
-        '<button id="submit-btn" class="btn-submit" onclick="submitOrders()">'
+        '<button id="save-draft-btn" class="btn-cancel" onclick="saveDraftOnly()">'
+        'Save Draft to Supabase</button>'
+        + _modal_single_buttons_html +
+        '<button id="submit-btn" class="btn-submit order-submit-btn" onclick="submitOrders()">'
         'Confirm &amp; Place All Orders</button>'
         '</div></div>'
         '<div id="progress-section" style="display:none">'
-        '<p style="color:#555;font-size:.88rem;margin-bottom:12px">'
+        '<p id="progress-copy" style="color:#555;font-size:.88rem;margin-bottom:12px">'
         'Submitting orders in parallel&hellip;</p>'
         '<div id="status-rows"></div>'
         '<div class="modal-actions" id="done-actions" style="display:none">'
@@ -1137,6 +1738,10 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body   = self.rfile.read(length) if length else b"{}"
+        content_type = self.headers.get("Content-Type", "").lower()
+        if "application/x-www-form-urlencoded" in content_type:
+            fields = urllib.parse.parse_qs(body.decode("utf-8"), keep_blank_values=True)
+            body = (fields.get("payload") or ["{}"]) [0].encode("utf-8")
         try:
             raw = json.loads(body)
         except Exception as e:
@@ -1146,15 +1751,15 @@ class handler(BaseHTTPRequestHandler):
         if isinstance(raw.get("counts"), dict):
             count_source = raw["counts"]
             truck_cycle = str(raw.get("truckCycle") or "friday").lower()
-            event_order_source = (
-                raw.get("eventOrders")
-                if isinstance(raw.get("eventOrders"), dict)
-                else {}
-            )
+            override = raw.get("partyOverride") if isinstance(
+                raw.get("partyOverride"), dict
+            ) else {}
+            order_overrides = raw.get("orderOverrides") or {}
         else:
             count_source = raw
             truck_cycle = "friday"
-            event_order_source = {}
+            override = {}
+            order_overrides = {}
 
         # Normalise keys to lowercase
         on_hand = {
@@ -1164,18 +1769,65 @@ class handler(BaseHTTPRequestHandler):
         }
 
         try:
-            canonical_items, best_prices = load_data(
-                on_hand, truck_cycle, event_order_source
+            # Refresh from Event Kitchen immediately before every generation.
+            # Client-supplied party quantities are deliberately ignored.
+            party_snapshot = refresh_party_demand(truck_cycle)
+            override_reason = (
+                str(override.get("reason") or "").strip()
+                if override.get("enabled") is True
+                else ""
             )
-            save_inventory_snapshot(on_hand, canonical_items)   # persist count for food cost
-            assignment, dropped, unassigned, notes, filler_cases = optimize_basket(canonical_items, best_prices)
+            override_used = require_safe_snapshot(
+                party_snapshot, override_reason=override_reason
+            )
+            canonical_items, _ = load_data(
+                on_hand,
+                truck_cycle,
+                party_need_by_item(party_snapshot),
+                load_prices=False,
+            )
+            # Supplier selection must use the same approved, non-blocked quotes
+            # displayed by the live Item Master dashboard. Reload it for every
+            # Generate Order request before applying overrides or optimizing.
+            best_prices = load_order_prices_from_item_master(canonical_items)
+            effective_order_overrides = order_overrides_for_delivery(
+                party_snapshot.get("delivery_date"), order_overrides
+            )
+            apply_order_overrides(
+                canonical_items, best_prices, effective_order_overrides
+            )
+            snapshot_id = save_inventory_snapshot(
+                on_hand,
+                canonical_items,
+                party_demand_snapshot_id=party_snapshot.get("id"),
+                order_overrides=order_overrides,
+            )
+            if override_used:
+                record_manager_override(
+                    party_snapshot["id"],
+                    override_reason,
+                    inventory_snapshot_id=snapshot_id,
+                )
+            assignment, dropped, unassigned, notes, filler_cases = optimize_basket(
+                canonical_items,
+                best_prices,
+                active_vendors=broadliner_ids_for_delivery(
+                    party_snapshot.get("delivery_date")
+                ),
+            )
             savings_rows, total_saved = compute_savings(assignment, canonical_items, best_prices)
             html = build_html(
                 assignment, dropped, unassigned, notes,
                 canonical_items, best_prices,
                 savings_rows, total_saved,
                 filler_cases,
+                snapshot_id,
+                party_snapshot,
+                override_reason if override_used else None,
             )
+        except PartyDemandBlocked as exc:
+            self._err(409, str(exc))
+            return
         except Exception as e:
             import traceback
             self._err(500, traceback.format_exc())

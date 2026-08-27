@@ -32,6 +32,8 @@ Supabase:  vendor_id=4, season="Fall 2025"
 
 import json, os, re, sys, urllib.request, urllib.error, urllib.parse
 
+from vendor_restrictions import vendor_allowed_for_item
+
 # ── Config ──────────────────────────────────────────────────────────────────
 
 API_ORIGIN = "https://order.gfs.com"
@@ -192,6 +194,7 @@ def sb_upsert(path, payload, on_conflict):
 def load_item_map():
     rows    = sb_get("items?select=id,name")
     by_name = {r["name"].lower().strip(): r["id"] for r in rows}
+    item_name_by_id = {r["id"]: r["name"] for r in rows}
     by_apn  = {}
     normalization_by_apn = {}
     rows2 = sb_get(
@@ -212,6 +215,7 @@ def load_item_map():
     return {
         "by_name": by_name,
         "by_apn": by_apn,
+        "item_name_by_id": item_name_by_id,
         "normalization_by_apn": normalization_by_apn,
     }
 
@@ -258,15 +262,29 @@ def _compatible_product(item_name, product_name):
 def match_item(name, apn, item_map):
     """Match a GFS material to a Supabase item_id by APN then by name."""
     if apn and apn.upper() in item_map["by_apn"]:
-        return item_map["by_apn"][apn.upper()]
+        item_id = item_map["by_apn"][apn.upper()]
+        item_name = item_map.get("item_name_by_id", {}).get(item_id, "")
+        if item_name and not vendor_allowed_for_item(item_name, VENDOR_ID):
+            return None
+        return item_id
     n = (name or "").lower().strip()
-    if n in item_map["by_name"] and _compatible_product(n, name):
+    if (
+        n in item_map["by_name"]
+        and vendor_allowed_for_item(n, VENDOR_ID)
+        and _compatible_product(n, name)
+    ):
         return item_map["by_name"][n]
     for k, v in item_map["by_name"].items():
-        if (k in n or n in k) and _compatible_product(k, name):
+        if (
+            vendor_allowed_for_item(k, VENDOR_ID)
+            and (k in n or n in k)
+            and _compatible_product(k, name)
+        ):
             return v
     best_score, best_id = 0.0, None
     for k, v in item_map["by_name"].items():
+        if not vendor_allowed_for_item(k, VENDOR_ID):
+            continue
         if not _compatible_product(k, name):
             continue
         score = _word_overlap(n, k)

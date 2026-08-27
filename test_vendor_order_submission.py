@@ -367,6 +367,10 @@ class PfgOrderSubmissionTests(unittest.TestCase):
 
 
 class GfsOrderSubmissionTests(unittest.TestCase):
+    def test_archived_gfs_ordering_is_blocked_before_any_request(self):
+        with self.assertRaisesRegex(RuntimeError, "temporarily archived"):
+            gfs.place_gfs_order({}, [{"materialNumber": "282537", "qty": 1}])
+
     def test_session_validation_rejects_empty_schedule_response(self):
         with mock.patch.object(gfs, "gfs_get", return_value={}):
             with self.assertRaisesRegex(RuntimeError, "session expired or invalid"):

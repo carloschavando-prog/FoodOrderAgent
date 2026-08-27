@@ -18,6 +18,13 @@ EVENT_DRIVEN_ITEM_NAMES = frozenset({
     "variety dessert bars",
 })
 
+REMOVED_ITEM_NAMES = frozenset({
+    # Retained only in historical inventory snapshots; no longer count or order it.
+    "simple syrup",
+})
+
+FRY_PAR_MULTIPLIER = 2.0
+
 # Friday values are the latest maintained standing PARs. Items without a
 # cycle-specific usage calculation intentionally use this value on both trucks.
 BASE_PAR_LEVELS = {
@@ -37,7 +44,7 @@ BASE_PAR_LEVELS = {
     "hungarian style paprika": 1.0,
     "kosher salt": 1.0,
     'tortilla, flour 12"': 7.0,
-    "garlic parmesan": 9.0,
+    "garlic parmesan": 2.0,
     "yellow mustard": 3.0,
     "ketchup packets": 3.0,
     "mustard packets": 3.0,
@@ -49,35 +56,36 @@ BASE_PAR_LEVELS = {
     "pizza sauce": 6.0,
     "bulk sugar": 1.0,
     "bbq sauce": 4.0,
-    "maraschino cherries": 3.0,
-    "cholula": 1.0,
+    "maraschino cherries": 2.0,
+    "cholula": 12.0,
     "crushed red pepper packets": 2.0,
     "premium buttery pan & grill": 3.0,
-    "shortening": 15.0,
+    "shortening": 8.0,
     "croutons": 3.0,
-    "styrofoam to-go containers": 4.0,
-    "can liners": 6.0,
+    "can liners": 3.0,
     "deli paper": 3.0,
-    "straws": 2.0,
+    "straws": 6.0,
+    "16 oz to-go cold cups": 2.0,
+    "styrofoam to-go containers": 4.0,
     "2 oz to-go cups": 2.0,
     "2 oz lids": 2.0,
     "foil sheets": 2.0,
     "cutlery kits": 1.0,
     "savaday": 2.0,
-    "napkins xpressnap": 7.0,
+    "napkins xpressnap": 3.0,
     "t-shirt bags": 1.0,
     "plastic wrap": 1.0,
     "aluminum foil roll": 1.0,
-    "pizza boxes": 4.0,
+    "pizza boxes": 1.0,
     "green onions": 2.0,
-    "celery sticks": 3.0,
+    "celery sticks": 2.0,
     "shredded lettuce": 6.0,
     "burger patties": 5.0,
     "double lobe chicken breasts": 4.0,
     "chicken wings": 7.0,
     "american slices 120 ct": 4.0,
     "pecorino romano blend": 1.0,
-    "parmesan cheese": 1.0,
+    "parmesan cheese": 3.0,
     "oranges": 2.0,
     "limes": 2.0,
     "sliced red tomatoes": 2.0,
@@ -87,17 +95,17 @@ BASE_PAR_LEVELS = {
     "pizza cheese": 10.0,
     "caesar dressing": 3.0,
     "ranch dressing": 8.0,
-    "simple syrup": 10.0,
-    "pickles": 1.0,
+    "pickles": 0.25,
     "bacon toppings": 2.0,
     "sliced bacon": 3.0,
     "potato hamburger bun": 3.0,
-    "fries": 13.0,
+    "fries": 13.0 * FRY_PAR_MULTIPLIER,
     "flatbread dough": 6.0,
     "pepperoni": 4.0,
     "beer cheese dip": 12.0,
     "tenders": 12.0,
-    "milwaukee pretzel": 12.0,
+    "24 ounce pretzel": 12.0,
+    "mozzarella sticks": 6.0,
     "eco lyzer": 1.0,
     "delimer": 3.0,
     "oven cleaner": 3.0,
@@ -113,11 +121,12 @@ BASE_PAR_LEVELS = {
     "dishmachine detergent": 2.0,
     "stainless steel scrubber": 1.0,
     "green scrubbies": 1.0,
-    "m nitrile gloves": 1.0,
-    "l nitrile gloves": 4.0,
-    "xl nitrile gloves": 4.0,
+    "m nitrile gloves": 12.0,
+    "l nitrile gloves": 12.0,
+    "xl nitrile gloves": 12.0,
     "fryer filters": 1.0,
     "daily's sweet & sour mix": 4.0,
+    "vanilla monin": 4.0,
     "chafing fuel can 6 hour": 2.0,
     "aluminum 1/2 pans": 4.0,
     "aluminum 1/3 pans": 4.0,
@@ -130,12 +139,13 @@ BASE_PAR_LEVELS = {
 # which use 4 ounces; its peak windows require 6 gallons Tuesday and 9 Friday.
 # French fries use 1/2 pound with platters, burgers, and wraps, and 1 pound
 # with Loaded Fries and Fry Platters. Peak usage rounds to 7 Tuesday cases and
-# 10 Friday cases; each delivery PAR includes the established 3-case buffer.
+# 10 Friday cases; each delivery PAR includes the established 3-case buffer,
+# then the maintained fry multiplier is applied to the completed calculation.
 # Flatbread dough comes 28 per case. The latest six-window peaks round to 4
 # Tuesday cases and 5 Friday cases; each delivery PAR includes a 1-case buffer.
 # Chicken Tender Platters use 5 tenders each, with 75 tenders per case. The
 # latest peaks round to 7 Tuesday cases and 11 Friday cases, plus 1 buffer case.
-# Milwaukee Pretzels come 8 per case. The latest six-window peaks require 7
+# The 24-ounce pretzels come 8 per case. The latest six-window peaks require 7
 # Tuesday cases and 12 Friday cases.
 # Potato hamburger buns come 60 per case, with 1 bun per Classic Burger. The
 # latest peaks round to 1 Tuesday and 2 Friday cases, plus 1 buffer case.
@@ -149,8 +159,8 @@ TUESDAY_PAR_OVERRIDES = {
     "chicken wings": 3.0,
     "double lobe chicken breasts": 3.0,
     "flatbread dough": 5.0,
-    "fries": 10.0,
-    "milwaukee pretzel": 7.0,
+    "fries": 10.0 * FRY_PAR_MULTIPLIER,
+    "24 ounce pretzel": 7.0,
     "ope sauce": 6.0,
     "pizza cheese": 5.0,
     "potato hamburger bun": 2.0,
@@ -164,8 +174,8 @@ FRIDAY_PAR_OVERRIDES = {
     "chicken wings": 7.0,
     "double lobe chicken breasts": 4.0,
     "flatbread dough": 6.0,
-    "fries": 13.0,
-    "milwaukee pretzel": 12.0,
+    "fries": 13.0 * FRY_PAR_MULTIPLIER,
+    "24 ounce pretzel": 12.0,
     "pizza cheese": 10.0,
     "potato hamburger bun": 3.0,
     "tenders": 12.0,

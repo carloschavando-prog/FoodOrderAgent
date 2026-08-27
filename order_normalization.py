@@ -8,16 +8,32 @@ DRY_STOCK_CATEGORY_ID = 4
 DISPOSABLES_CATEGORY_ID = 5
 
 ITEM_COUNT_UNITS = {
+    "blanco": "5-pound bag",
+    "holy cow": "5-pound bag",
+    "holy gospel": "5-pound bag",
+    "holy voodoo": "5-pound bag",
+    "labels": "roll",
+    "use first stickers": "roll",
+    "m nitrile gloves": "box",
+    "l nitrile gloves": "box",
+    "xl nitrile gloves": "box",
     "american slices 120 ct": "5-pound pack",
     "double lobe chicken breasts": "5-pound bag",
     "fajita chicken": "5-pound bag",
+    "diced red onions": "5-pound bag",
+    "diced tomatoes": "5-pound bag",
     "jtm taco meat": "5-pound bag",
+    "mild cheddar cheese": "5-pound bag",
     "parmesan cheese": "5-pound bag",
     "pecorino romano blend": "5-pound bag",
     "pizza cheese": "5-pound bag",
+    "caesar dressing": "gallon",
     "ranch dressing": "gallon",
-    "simple syrup": "gallon",
+    "vanilla monin": "bottle",
+    "shredded lettuce": "2-pound bag",
+    "sour cream": "5-pound tub",
     'tortilla, flour 12"': "12-count pack",
+    'tortilla, flour 6"': "pack",
 }
 
 DRY_STOCK_COUNT_UNITS = {
@@ -34,21 +50,22 @@ DRY_STOCK_COUNT_UNITS = {
     "pizza sauce": "#10 can",
     "bulk sugar": "5-pound bag",
     "bbq sauce": "gallon",
-    "maraschino cherries": "1/2-gallon jar",
+    "maraschino cherries": "case",
     "cholula": "each",
     "crushed red pepper packets": "case",
     "premium buttery pan & grill": "gallon",
-    "fire roasted salsa": "each",
+    "fire roasted salsa": "68-ounce container",
     "black beans": "#10 can",
     "shortening": "case",
     "croutons": "bag",
 }
 
 DISPOSABLES_COUNT_UNITS = {
-    "styrofoam to-go containers": "case",
     "can liners": "case",
     "deli paper": "box",
     "straws": "box",
+    "16 oz to-go cold cups": "case",
+    "styrofoam to-go containers": "case",
     "2 oz to-go cups": "case",
     "2 oz lids": "case",
     "foil sheets": "box",
@@ -139,6 +156,23 @@ def _inner_pack_count(pricing):
     return float(match.group(1)) if match else None
 
 
+def _roll_pack_count(pricing):
+    """Read rolls from either 6/250-style packs or explicit 1 RL text."""
+    inner_count = _inner_pack_count(pricing)
+    if inner_count:
+        return inner_count
+    text = " ".join(
+        str(pricing.get(field) or "")
+        for field in ("pack_size", "unit_note")
+    )
+    match = re.search(
+        r"(?:^|\s)(\d+(?:\.\d+)?)\s*(?:rl|rolls?)\b",
+        text,
+        re.I,
+    )
+    return float(match.group(1)) if match else None
+
+
 def _five_pound_pack_count(pricing):
     text = " ".join(
         str(pricing.get(field) or "")
@@ -195,6 +229,11 @@ def units_per_case(item, pricing):
         if pack_count:
             return pack_count
 
+    if count_unit == "bottle":
+        pack_count = _inner_pack_count(pricing)
+        if pack_count:
+            return pack_count
+
     quantity = _positive_quantity(pricing)
     basis = _basis(pricing)
     if quantity is None:
@@ -228,6 +267,28 @@ def units_per_case(item, pricing):
             return quantity / (5.0 * OUNCES_PER_POUND)
         return None
 
+    if count_unit == "5-pound tub":
+        if basis == "lb":
+            return quantity / 5.0
+        if basis == "oz":
+            return quantity / (5.0 * OUNCES_PER_POUND)
+        return None
+
+    if count_unit == "2-pound bag":
+        if basis == "lb":
+            return quantity / 2.0
+        if basis == "oz":
+            return quantity / (2.0 * OUNCES_PER_POUND)
+        return None
+
+    if count_unit == "pack" and item["name"].lower().strip() == 'tortilla, flour 6"':
+        pack_count = _explicit_pack_count(pricing, r"24\b")
+        if pack_count:
+            return pack_count
+        if basis == "each":
+            return quantity / 24.0
+        return None
+
     if count_unit == "12-count pack":
         if basis == "each":
             return quantity / 12.0
@@ -238,6 +299,11 @@ def units_per_case(item, pricing):
             return quantity / (OUNCES_PER_GALLON / 2.0)
         if basis == "gallon":
             return quantity / 0.5
+        return None
+
+    if count_unit == "68-ounce container":
+        if basis == "oz":
+            return quantity / 68.0
         return None
 
     if count_unit == "bag" and item["name"].lower().strip() == "croutons":
@@ -259,8 +325,16 @@ def units_per_case(item, pricing):
             return quantity / each_ounces
         return None
 
+    if count_unit == "bottle":
+        if basis == "each":
+            return quantity
+        return None
+
     if count_unit == "#10 can":
-        pack_count = _explicit_pack_count(pricing, r"#?\s*10\b")
+        pack_count = _explicit_pack_count(
+            pricing,
+            r"#?\s*10\s*(?:can|cn)?\b",
+        )
         return pack_count
 
     if count_unit == "box":
@@ -275,6 +349,8 @@ def units_per_case(item, pricing):
         return None
 
     if count_unit == "roll":
+        if item["name"].lower().strip() in {"labels", "use first stickers"}:
+            return _roll_pack_count(pricing)
         return _rolls_per_case(item, pricing)
 
     return None

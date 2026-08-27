@@ -54,7 +54,7 @@ class EventDrivenItemTests(unittest.TestCase):
             self.assertEqual(item["par_level"], 0)
             self.assertEqual(item["order_qty"], 0)
 
-    def test_explicit_event_orders_are_kept_separate_from_standing_pars(self):
+    def test_party_need_is_kept_separate_from_standing_pars(self):
         item_rows = [
             {
                 "id": 1,
@@ -98,7 +98,7 @@ class EventDrivenItemTests(unittest.TestCase):
             self.assertEqual(by_name[name]["par_level"], 0)
             self.assertEqual(by_name[name]["order_qty"], quantity)
 
-    def test_explicit_party_orders_are_added_to_standing_shortages(self):
+    def test_party_need_is_combined_before_on_hand_is_subtracted(self):
         item_rows = [
             {
                 "id": 82,
@@ -133,8 +133,8 @@ class EventDrivenItemTests(unittest.TestCase):
 
     def test_party_proteins_convert_five_pound_bags_to_vendor_cases(self):
         cases = {
-            "JTM Taco Meat": (21, 20, 4, 6),
-            "Fajita Chicken": (21, 10, 2, 11),
+            "JTM Taco Meat": (4, 20, 4, 1),
+            "Fajita Chicken": (4, 10, 2, 2),
         }
         for name, values in cases.items():
             with self.subTest(name=name):
@@ -172,7 +172,7 @@ class EventDrivenItemTests(unittest.TestCase):
         }
         pricing["units_per_case"] = units_per_case(item, pricing)
 
-        self.assertEqual(item["count_unit"], "each")
+        self.assertEqual(item["count_unit"], "68-ounce container")
         self.assertEqual(pricing["units_per_case"], 4)
         self.assertEqual(cases_required(item, pricing), 2)
 
@@ -191,52 +191,16 @@ class EventDrivenItemTests(unittest.TestCase):
         self.assertNotIn("if(item.eventDriven) continue;", collect_counts)
         self.assertNotIn("if(item.eventDriven) continue;", load_snapshot)
         self.assertNotIn("if(item.eventDriven) continue;", generate_order)
-        self.assertIn("eventOrders", generate_order)
+        self.assertIn("refreshPartyDemand({beforeOrder:true})", generate_order)
+        self.assertIn("partyOverride", generate_order)
         self.assertIn("calculatedOrderQty(item,oh)", render_card)
 
-    def test_active_sheet_lists_current_party_quantities(self):
-        self.assertIn(
-            'name:"Black Beans",                buildTo:null,eventDriven:true, '
-            'eventOrderQty:13',
-            self.index_source,
-        )
-        self.assertIn(
-            'name:"Fajita Chicken",             buildTo:null,eventDriven:true, '
-            'eventOrderQty:21',
-            self.index_source,
-        )
-        self.assertIn(
-            'name:"JTM Taco Meat",              buildTo:null,eventDriven:true, '
-            'eventOrderQty:21',
-            self.index_source,
-        )
-        for name, quantity in (
-            ("Broccoli", 1),
-            ("Assorted Peppers", 1),
-            ("Cherry Tomatoes", 1),
-            ("Sour Cream", 1),
-        ):
-            with self.subTest(name=name):
-                self.assertRegex(
-                    self.index_source,
-                    rf'name:"{name}"[^\n]+eventOrderQty:{quantity}',
-                )
-        self.assertRegex(
-            self.index_source,
-            r'name:"Chicken Wings"[^\n]+eventOrderQty:3',
-        )
-        self.assertRegex(
-            self.index_source,
-            r'name:"Tenders"[^\n]+eventOrderQty:3',
-        )
-        self.assertRegex(
-            self.index_source,
-            r'name:"Fire Roasted Salsa"[^\n]+eventOrderQty:8',
-        )
-        self.assertRegex(
-            self.index_source,
-            r'name:"Maraschino Cherries"[^\n]+eventOrderQty:6',
-        )
+    def test_active_sheet_has_no_temporary_party_quantities(self):
+        self.assertNotIn("eventOrderQty", self.index_source)
+        self.assertNotIn("eventOrderCycle", self.index_source)
+        self.assertNotIn("eventOrderThrough", self.index_source)
+        self.assertIn('id="partyDemandSection"', self.index_source)
+        self.assertIn("Party Need", self.index_source)
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ SB_KEY   = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsC
 SB_SKEY  = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 API_ORIGIN = "https://order.gfs.com"
+GFS_ORDERING_ACTIVE = False  # Temporarily archived; keep integration for restoration.
 _UA      = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
@@ -224,6 +225,10 @@ def place_gfs_order(cookies, items):
     Returns: {"orderId": "...", "deliveryDate": "2026-05-29",
               "cartOrderIds": [...], "cartId": "..."}
     """
+    if not GFS_ORDERING_ACTIVE:
+        raise RuntimeError(
+            "GFS ordering is temporarily archived. No GFS order was placed."
+        )
     schedules = validate_session(cookies)
 
     # ── Step 1: Get current active cart ──────────────────────────────────────
@@ -297,6 +302,10 @@ class handler(BaseHTTPRequestHandler):
         items  = body.get("items", [])
 
         try:
+            if not GFS_ORDERING_ACTIVE:
+                raise RuntimeError(
+                    "GFS ordering is temporarily archived. No GFS order was placed."
+                )
             if not items:
                 raise ValueError("No items in request body")
             cookies = load_gfs_cookies()

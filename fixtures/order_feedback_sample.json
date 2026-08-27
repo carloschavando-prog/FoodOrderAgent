@@ -1,0 +1,113 @@
+{
+  "order_id": "5b3fd304-70cb-4ff7-8640-8f039aeb7439",
+  "order_date": "2026-08-03",
+  "purchasing_contact": {
+    "name": "Jordan Lee",
+    "business_name": "On Par Bar & Grill",
+    "contact_detail": "purchasing@example.com · 555-0100"
+  },
+  "representatives": [
+    {"supplier_id": 1, "name": "Taylor Example", "email": "us-foods-rep@example.com"},
+    {"supplier_id": 2, "name": "Morgan Example", "email": "pfg-rep@example.com"},
+    {"supplier_id": 3, "name": "Casey Example", "email": "sysco-rep@example.com"},
+    {"supplier_id": 4, "name": "Riley Example", "email": "gfs-rep@example.com"}
+  ],
+  "decisions": [
+    {
+      "canonical_product_key": "can-liners",
+      "item_name": "Can Liners",
+      "supplier_id": 1,
+      "selected_supplier_id": 3,
+      "decision_reason": "lost_on_price",
+      "ordered_quantity": 3,
+      "allocated_elsewhere_cases": 2,
+      "recipient_item_number": "100100",
+      "recipient_description": "40 x 46 in · 100 count case",
+      "quote_eligible": true,
+      "quote_available": true,
+      "quote_comparable": true,
+      "candidate_normalized_net_cost": 61.50,
+      "selected_normalized_net_cost": 56.25
+    },
+    {
+      "canonical_product_key": "can-liners",
+      "item_name": "Can Liners",
+      "supplier_id": 1,
+      "selected_supplier_id": 3,
+      "decision_reason": "lost_on_price",
+      "ordered_quantity": 3,
+      "allocated_elsewhere_cases": 1,
+      "recipient_item_number": "100100",
+      "recipient_description": "40 x 46 in · 100 count case",
+      "quote_eligible": true,
+      "quote_available": true,
+      "quote_comparable": true,
+      "candidate_normalized_net_cost": 61.50,
+      "selected_normalized_net_cost": 56.25
+    },
+    {
+      "canonical_product_key": "pizza-cheese",
+      "item_name": "Pizza Cheese",
+      "supplier_id": 2,
+      "selected_supplier_id": 4,
+      "decision_reason": "lost_on_price",
+      "ordered_quantity": 8,
+      "allocated_elsewhere_cases": 2,
+      "recipient_item_number": "200200",
+      "recipient_description": "Whole milk mozzarella · 4/5 lb",
+      "quote_eligible": true,
+      "quote_available": true,
+      "quote_comparable": true,
+      "candidate_normalized_net_cost": 144.00,
+      "selected_normalized_net_cost": 137.00
+    },
+    {
+      "canonical_product_key": "chicken-breast",
+      "item_name": "Double Lobe Chicken Breasts",
+      "supplier_id": 3,
+      "selected_supplier_id": 1,
+      "decision_reason": "lost_on_price",
+      "ordered_quantity": 8,
+      "allocated_elsewhere_cases": 1,
+      "recipient_item_number": "300300",
+      "recipient_description": "Boneless skinless · 4/10 lb",
+      "quote_eligible": true,
+      "quote_available": true,
+      "quote_comparable": true,
+      "candidate_normalized_net_cost": 92.00,
+      "selected_normalized_net_cost": 87.50
+    },
+    {
+      "canonical_product_key": "ranch",
+      "item_name": "Ranch Dressing",
+      "supplier_id": 4,
+      "selected_supplier_id": 2,
+      "decision_reason": "lost_on_price",
+      "ordered_quantity": 4,
+      "allocated_elsewhere_cases": 1,
+      "recipient_item_number": "400400",
+      "recipient_description": "Buttermilk ranch · 4/1 gal",
+      "quote_eligible": true,
+      "quote_available": true,
+      "quote_comparable": true,
+      "candidate_normalized_net_cost": 78.00,
+      "selected_normalized_net_cost": 72.00
+    },
+    {
+      "canonical_product_key": "foil",
+      "item_name": "Aluminum Foil Roll",
+      "supplier_id": 4,
+      "selected_supplier_id": 2,
+      "decision_reason": "missing_or_ineligible_quote",
+      "ordered_quantity": 1,
+      "allocated_elsewhere_cases": 1,
+      "recipient_item_number": "",
+      "recipient_description": "Comparison unavailable",
+      "quote_eligible": false,
+      "quote_available": false,
+      "quote_comparable": false,
+      "candidate_normalized_net_cost": null,
+      "selected_normalized_net_cost": 44.00
+    }
+  ]
+}

@@ -24,18 +24,20 @@ class BlackBeanNormalizationTests(unittest.TestCase):
         self.assertEqual(pricing["units_per_case"], 6)
         self.assertEqual(cases_required(item, pricing), 3)
 
-    def test_active_sheet_uses_the_gfs_number_ten_can(self):
+    def test_active_sheet_hides_but_preserves_the_archived_gfs_mapping(self):
         source = pathlib.Path("index.html").read_text()
 
+        # The original mapping stays in source as archive data.
         self.assertIn(
             'name:"Black Beans",                buildTo:null,eventDriven:true, '
-            'eventOrderQty:13',
+            'vendor:"GFS"',
             source,
         )
-        self.assertRegex(
-            source,
-            r'name:"Black Beans"[^\n]+vendor:"GFS"[^\n]+unit:"6/#10 CAN"',
-        )
+        self.assertNotIn("eventOrderQty", source)
+        # Active rendering and pricing route it through current suppliers.
+        self.assertIn("ARCHIVED_INVENTORY_VENDOR_NAMES = new Set(['gfs'])", source)
+        self.assertIn("${inventoryVendorLabel(item)}", source)
+        self.assertNotIn("'sysco only':3,'gfs':4", source)
 
 
 if __name__ == "__main__":

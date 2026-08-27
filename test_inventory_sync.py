@@ -48,7 +48,7 @@ class InventorySyncGuardTests(unittest.TestCase):
         )
         self.assertLess(
             generate_order.index("await verifyLatestSharedInventory()"),
-            generate_order.index("fetch('/api/generate_order'"),
+            generate_order.index("form.submit()"),
         )
 
     def test_failed_verification_blocks_order_generation(self):

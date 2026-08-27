@@ -29,6 +29,7 @@ def price(quantity, basis="each", pack_size="", vendor_item_name="", unit_note="
 class DisposablesNormalizationTests(unittest.TestCase):
     def test_count_units_match_inventory_rules(self):
         expected = {
+            "16 oz To-Go Cold Cups": "case",
             "Styrofoam To-Go Containers": "case",
             "Can Liners": "case",
             "Deli Paper": "box",
@@ -87,6 +88,16 @@ class DisposablesNormalizationTests(unittest.TestCase):
         self.assertEqual(pricing["units_per_case"], 1)
         self.assertEqual(cases_required(row, pricing), 2)
 
+    def test_label_rolls_use_the_outer_pack_count(self):
+        for name in ("Labels", "Use First Stickers"):
+            with self.subTest(name=name):
+                row = item(name, 2)
+                pricing = price(500, pack_size="1/500CT")
+
+                self.assertEqual(row["count_unit"], "roll")
+                self.assertEqual(units_per_case(row, pricing), 1)
+                self.assertEqual(cases_required(row, pricing), 2)
+
     def test_short_aluminum_foil_roll_is_rejected(self):
         row = item("Aluminum Foil Roll", 1)
         pricing = price(
@@ -97,6 +108,16 @@ class DisposablesNormalizationTests(unittest.TestCase):
         )
 
         self.assertIsNone(units_per_case(row, pricing))
+
+    def test_gloves_are_counted_as_boxes(self):
+        for name in ("M Nitrile Gloves", "L Nitrile Gloves", "XL Nitrile Gloves"):
+            with self.subTest(name=name):
+                row = item(name, 11)
+                pricing = price(1000, pack_size="10/100")
+
+                self.assertEqual(row["count_unit"], "box")
+                self.assertEqual(units_per_case(row, pricing), 10)
+                self.assertEqual(cases_required(row, pricing), 2)
 
 
 if __name__ == "__main__":

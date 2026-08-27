@@ -22,7 +22,7 @@ class InventoryAliasTests(unittest.TestCase):
         ):
             items, _ = generate_order.load_data({"napkins c fold": 10})
 
-        self.assertEqual(items[0]["par_level"], 7)
+        self.assertEqual(items[0]["par_level"], 3)
         self.assertEqual(items[0]["order_qty"], 0)
 
     def test_database_only_item_has_no_configured_par_or_order(self):

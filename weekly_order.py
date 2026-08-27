@@ -5,11 +5,13 @@ Reads par levels + live pricing from Supabase.
 Assigns each item to the cheapest vendor that carries it,
 then enforces vendor order minimums.
 
-Vendor minimums:
+Active vendor minimums:
   US Foods (1) : 20 cases
   PFG      (2) : 20 cases
   Sysco    (3) : 20 cases
-  GFS      (4) : $750 purchase
+
+GFS (4) is temporarily archived; its database history and integration code
+are retained but excluded from active orders.
 
 Algorithm:
   1. Greedy assignment — cheapest vendor per item
@@ -35,7 +37,8 @@ from order_normalization import (
     pricing_matches_item_requirements,
     units_per_case,
 )
-from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, par_for_delivery
+from delivery_pars import EVENT_DRIVEN_ITEM_NAMES, REMOVED_ITEM_NAMES, par_for_delivery
+from vendor_restrictions import vendor_allowed_for_item
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SB_URL = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
@@ -47,9 +50,11 @@ SB_HDRS = {
 }
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "weekly_order.html")
 
-# Vendor IDs for the 4 broadliners
-BROADLINER_IDS = [1, 2, 3, 4]
+# Active broadliners. GFS (4) is temporarily archived.
+BROADLINER_IDS = [1, 2, 3]
+ARCHIVED_BROADLINER_IDS = {4}
 VENDOR_NAMES   = {1: "US Foods", 2: "PFG", 3: "Sysco", 4: "GFS"}
+OTHER_VENDOR_NAMES = {5: "I Supply", 6: "Markets Depot", 7: "Meat Church"}
 VENDOR_ABBR    = {1: "USF",      2: "PFG", 3: "SYC",   4: "GFS"}
 VENDOR_COLOR   = {
     1: ("#0f8f4f", "#dff5e9"),   # US Foods green
@@ -97,13 +102,27 @@ def canonical_inventory_name(name):
     normalized = name.lower().strip()
     return INVENTORY_NAME_ALIASES.get(normalized, normalized)
 
+
+def preferred_vendor_name(vendor_id):
+    if vendor_id in BROADLINER_IDS:
+        return VENDOR_NAMES[vendor_id]
+    if vendor_id in ARCHIVED_BROADLINER_IDS:
+        return "Select active vendor"
+    return OTHER_VENDOR_NAMES.get(vendor_id, f"Vendor {vendor_id}")
+
 # Contracted dish-machine chemicals must stay with US Foods even when another
 # broadliner has a lower price for a similarly named product.
 REQUIRED_VENDOR_BY_ITEM = {
+    "aluminum 1/3 pans": 1,
+    "dishmachine detergent": 1,
+    "low temp sanitizer": 1,
+    "mozzarella sticks": 1,
     "pot & pan detergent": 1,
     "pre soak": 1,
+    "quat sanitizer": 1,
     "heavy duty rinse additive": 1,
     "sanitizing floor cleaner": 1,
+    "solid dish detergent": 1,
 }
 
 # ── Supabase helpers ──────────────────────────────────────────────────────────
@@ -154,6 +173,8 @@ def load_data(on_hand=None, truck_cycle="friday"):
     id_to_item  = {}
     for row in raw_items:
         key = row["name"].lower().strip()
+        if key in REMOVED_ITEM_NAMES:
+            continue
         name_groups[key].append(row["id"])
         id_to_item[row["id"]] = row
 
@@ -216,7 +237,9 @@ def load_data(on_hand=None, truck_cycle="friday"):
         vid = row["vendor_id"]
         if vid not in BROADLINER_IDS:
             continue
-        apn   = row.get("apn") or ""
+        apn = str(row.get("apn") or "").strip()
+        if not apn:
+            continue
         price = row.get("price")
         if price is None:
             continue
@@ -224,6 +247,8 @@ def load_data(on_hand=None, truck_cycle="friday"):
         can_id = id_to_canonical.get(iid, iid)
         item = canonical_by_id.get(can_id)
         if item is None:
+            continue
+        if not vendor_allowed_for_item(item["name"], vid, apn):
             continue
         pricing = {
             "price": float(price),
@@ -278,13 +303,20 @@ def assign_cheapest(canonical_items, best_prices, active):
                 required_vid in active
                 and ci["id"] in best_prices
                 and required_vid in best_prices[ci["id"]]
+                and vendor_allowed_for_item(ci["name"], required_vid)
+                and str(best_prices[ci["id"]][required_vid].get("apn") or "").strip()
             ):
                 assignment[ci["id"]] = required_vid
             continue
         opts = {
             v: best_prices[ci["id"]][v]
             for v in active
-            if ci["id"] in best_prices and v in best_prices[ci["id"]]
+            if (
+                ci["id"] in best_prices
+                and v in best_prices[ci["id"]]
+                and vendor_allowed_for_item(ci["name"], v)
+                and str(best_prices[ci["id"]][v].get("apn") or "").strip()
+            )
         }
         if opts:
             assignment[ci["id"]] = min(
@@ -412,6 +444,8 @@ def build_rescue_fillers(vid, canonical_items, best_prices, assignment, filler_c
 
     candidates = []
     for ci in canonical_items:
+        if not vendor_allowed_for_item(ci["name"], vid):
+            continue
         required_vid = required_vendor(ci)
         if required_vid is not None and required_vid != vid:
             continue
@@ -1036,9 +1070,6 @@ def build_html(
 
     # ── Manual / Other Vendors section ───────────────────────────────────────
     if unassigned:
-        other_vendors = {
-            5: "I Supply", 6: "Markets Depot", 7: "Meat Church",
-        }
         html.append("""
 <div class="manual-card">
   <div class="manual-header">🛒  Manual / Other Vendors</div>
@@ -1061,8 +1092,7 @@ def build_html(
                 html.append(f'<tr class="cat-header"><td colspan="5">{cat_name}</td></tr>')
 
             pref_vid  = ci["preferred_vid"]
-            pref_name = (VENDOR_NAMES.get(pref_vid)
-                         or other_vendors.get(pref_vid, f"Vendor {pref_vid}"))
+            pref_name = preferred_vendor_name(pref_vid)
             needed = (
                 f'{fmt_qty(ci["order_qty"])} '
                 f'{fmt_count_unit(ci.get("count_unit", "case"), ci["order_qty"])}'

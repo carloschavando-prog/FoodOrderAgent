@@ -1,0 +1,9 @@
+.claude/
+.env
+outputs/
+output/
+audit_*.py
+reconcile_*.py
+test_*.py
+__pycache__/
+*.pyc

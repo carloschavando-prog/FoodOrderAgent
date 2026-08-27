@@ -54,24 +54,6 @@ jobs:
           PRICE_SEASON:       ${{ vars.PRICE_SEASON }}
         run: python3 scrape_pfg.py
 
-  gfs:
-    name: GFS Gordon Food Service
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Scrape GFS prices
-        env:
-          SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
-          GFS_COOKIES:   ${{ secrets.GFS_COOKIES }}
-          PRICE_SEASON:  ${{ vars.PRICE_SEASON }}
-        run: python3 scrape_gfs.py
-
   sysco:
     name: Sysco
     runs-on: ubuntu-latest
@@ -94,7 +76,7 @@ jobs:
 
   report:
     name: Basket Report
-    needs: [usfoods, pfg, gfs, sysco]
+    needs: [usfoods, pfg, sysco]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -119,7 +101,6 @@ jobs:
           CONTROL_BOARD_SECRET: ${{ secrets.CONTROL_BOARD_SECRET }}
           USF_RESULT: ${{ needs.usfoods.result }}
           PFG_RESULT: ${{ needs.pfg.result }}
-          GFS_RESULT: ${{ needs.gfs.result }}
           SYS_RESULT: ${{ needs.sysco.result }}
         run: |
           if [ -z "$CONTROL_BOARD_URL" ]; then
@@ -129,12 +110,11 @@ jobs:
           FAILED=""
           [ "$USF_RESULT" != "success" ] && FAILED="$FAILED US-Foods"
           [ "$PFG_RESULT" != "success" ] && FAILED="$FAILED PFG"
-          [ "$GFS_RESULT" != "success" ] && FAILED="$FAILED GFS"
           [ "$SYS_RESULT" != "success" ] && FAILED="$FAILED Sysco"
           if [ -n "$FAILED" ]; then
             PAYLOAD=$(printf '{"agent_key":"ordering","event":"failed","message":"Vendor price scrape failed:%s"}' "$FAILED")
           else
-            PAYLOAD='{"agent_key":"ordering","event":"finished","output":"All 4 vendor price scrapes succeeded"}'
+            PAYLOAD='{"agent_key":"ordering","event":"finished","output":"All 3 active vendor price scrapes succeeded"}'
           fi
           curl -s -X POST "$CONTROL_BOARD_URL/api/report" \
             -H "content-type: application/json" \

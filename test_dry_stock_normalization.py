@@ -48,11 +48,16 @@ class DryStockNormalizationTests(unittest.TestCase):
         self.assertEqual(pricing["units_per_case"], 4)
         self.assertEqual(cases_required(row, pricing), 2)
 
-    def test_simple_syrup_is_counted_in_gallons(self):
-        row = item("Simple Syrup", 10)
+    def test_caesar_dressing_shortage_converts_gallons_to_cases(self):
+        row = item("Caesar Dressing", 3)
         row["category_id"] = 6
+        row["count_unit"] = count_unit_for_item(row)
+        pricing = price(65.83, 512)
+        pricing["units_per_case"] = units_per_case(row, pricing)
 
         self.assertEqual(count_unit_for_item(row), "gallon")
+        self.assertEqual(pricing["units_per_case"], 4)
+        self.assertEqual(cases_required(row, pricing), 1)
 
     def test_vendor_selection_uses_extended_cost_for_each_pack(self):
         row = item("Garlic Parmesan", 5)
@@ -88,14 +93,14 @@ class DryStockNormalizationTests(unittest.TestCase):
         self.assertEqual(units_per_case(pizza, pizza_price), 6)
         self.assertIsNone(units_per_case(beans, small_can_price))
 
-    def test_one_cherry_case_is_six_half_gallon_jars(self):
-        row = item("Maraschino Cherries", 6)
+    def test_cherries_are_counted_and_ordered_by_case(self):
+        row = item("Maraschino Cherries", 2)
         pricing = price(89.61, 384, pack_size="6/0.5 GAL")
         pricing["units_per_case"] = units_per_case(row, pricing)
 
-        self.assertEqual(row["count_unit"], "1/2-gallon jar")
-        self.assertEqual(pricing["units_per_case"], 6)
-        self.assertEqual(cases_required(row, pricing), 1)
+        self.assertEqual(row["count_unit"], "case")
+        self.assertEqual(pricing["units_per_case"], 1)
+        self.assertEqual(cases_required(row, pricing), 2)
 
     def test_incompatible_weight_basis_is_not_used_for_gallons(self):
         row = item("Blended Oil", 5)

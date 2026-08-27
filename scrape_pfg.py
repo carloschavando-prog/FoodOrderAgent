@@ -25,6 +25,7 @@ SB_URL     = os.getenv("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co
 SB_KEY     = os.getenv("SUPABASE_KEY", "sb_publishable_BZ9rpzEITSHCo2BVGHA1iA_7nsCVnMc")
 SEASON     = os.getenv("PRICE_SEASON", "Spring 2026")
 VENDOR_ID  = 2   # PFG
+DEFAULT_LIST_ID = "168ef1b1-5354-4883-8c26-69a180f6a0ef"  # Spring 2026
 
 CONFIG_FILE = os.path.expanduser("~/.FoodOrderAgent/pfg_api_config.json")
 
@@ -374,7 +375,12 @@ def get_prices(bearer, customer_id, order_id, opco_number, biz_unit, delivery_da
 def main():
     config      = load_config()
     customer_id = config.get("customer_id", "ccbddeae-bc43-4287-a4e0-8d5bee2b913c")
-    list_id     = config.get("fall_list_id", "13e8ce85-8f4e-4cfe-a6dd-cac49a88dc60")
+    list_id = (
+        os.getenv("PFG_LIST_ID")
+        or config.get("list_id")
+        or config.get("spring_list_id")
+        or DEFAULT_LIST_ID
+    )
     biz_unit    = int(config.get("biz_unit_key", 3))
 
     # Supabase item master

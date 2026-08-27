@@ -12,6 +12,8 @@ import os
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
+from party_demand import load_party_snapshot
+
 
 SB_URL = os.environ.get("SUPABASE_URL", "https://gnkwdoohzspomvdshzge.supabase.co")
 SB_KEY = os.environ.get("SUPABASE_KEY", "")
@@ -60,6 +62,48 @@ def _number(value):
         return None
 
 
+def _normalize_order_overrides(value):
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("Order overrides must be an object.")
+    if len(value) > 200:
+        raise ValueError("Too many order overrides were provided.")
+
+    normalized = {}
+    for raw_name, raw_override in value.items():
+        name = str(raw_name or "").strip()
+        if not name or not isinstance(raw_override, dict):
+            raise ValueError("Each order override must name an item and provide settings.")
+        quantity = _number(raw_override.get("quantity"))
+        mode = str(raw_override.get("mode") or "").strip().lower()
+        if quantity is None or quantity < 0:
+            raise ValueError(f"Order override for {name} has an invalid quantity.")
+        if mode not in ("cases", "minimum_cases", "count_unit"):
+            raise ValueError(f"Order override for {name} has an invalid mode.")
+        if mode in ("cases", "minimum_cases") and not quantity.is_integer():
+            raise ValueError(f"Order override for {name} must use whole cases.")
+
+        override = {
+            "quantity": int(quantity) if quantity.is_integer() else quantity,
+            "mode": mode,
+        }
+        vendor_id = raw_override.get("vendorId")
+        if vendor_id not in (None, ""):
+            try:
+                vendor_id = int(vendor_id)
+            except (TypeError, ValueError):
+                raise ValueError(f"Order override for {name} has an invalid vendor.")
+            if vendor_id not in (1, 2, 3):
+                raise ValueError(f"Order override for {name} has an invalid vendor.")
+            override["vendorId"] = vendor_id
+        required_pack = str(raw_override.get("required_pack") or "").strip()
+        if required_pack:
+            override["required_pack"] = required_pack[:80]
+        normalized[name] = override
+    return normalized
+
+
 def _load_item_lookup():
     rows = _sb_request("items?select=id,name,pack_size&order=id.asc", use_service=True)
     by_name = {}
@@ -76,7 +120,7 @@ def _latest_snapshot():
         use_service=True,
     )
     if not snapshots:
-        return None, []
+        return None, [], None
 
     snapshot = snapshots[0]
     snapshot_id = snapshot["id"]
@@ -84,7 +128,12 @@ def _latest_snapshot():
         f"inventory_snapshot_items?select=*&snapshot_id=eq.{snapshot_id}&order=id.asc",
         use_service=True,
     )
-    return snapshot, items or []
+    party_snapshot = None
+    if snapshot.get("party_demand_snapshot_id") is not None:
+        party_snapshot = load_party_snapshot(
+            snapshot_id=snapshot["party_demand_snapshot_id"]
+        )
+    return snapshot, items or [], party_snapshot
 
 
 def _save_snapshot(payload):
@@ -123,6 +172,10 @@ def _save_snapshot(payload):
     header_payload = {
         "taken_by": payload.get("taken_by") or None,
         "notes": payload.get("notes") or "Saved from Kitchen Order Sheet",
+        "party_demand_snapshot_id": payload.get("party_demand_snapshot_id") or None,
+        "order_overrides": _normalize_order_overrides(
+            payload.get("order_overrides")
+        ),
     }
     snapshot = _sb_request(
         "inventory_snapshots",
@@ -156,7 +209,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            snapshot, items = _latest_snapshot()
+            snapshot, items, party_snapshot = _latest_snapshot()
             counts = {
                 row["item_name"]: row.get("on_hand_qty")
                 for row in items
@@ -166,6 +219,7 @@ class handler(BaseHTTPRequestHandler):
                 "snapshot": snapshot,
                 "counts": counts,
                 "items": items,
+                "party_demand": party_snapshot,
             })
         except Exception as exc:
             self._json(500, {"error": str(exc)})
