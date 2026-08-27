@@ -1,6 +1,9 @@
 import datetime as dt
 import pathlib
+import threading
+import time
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 from api import generate_order, inventory_snapshot
@@ -8,6 +11,8 @@ from order_normalization import cases_required, count_unit_for_item, units_per_c
 from party_demand import (
     EASTERN,
     PartyDemandBlocked,
+    PartyDemandError,
+    EventKitchenClient,
     PrepListEventClient,
     _default_event_client,
     _prep_list_day_payload,
@@ -291,6 +296,83 @@ class PartyCalculationTests(unittest.TestCase):
                 calls.index(("sync", local_date)),
                 calls.index(("fetch", local_date)),
             )
+        first_fetch = min(
+            calls.index(("fetch", local_date))
+            for local_date in (
+                "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"
+            )
+        )
+        self.assertTrue(all(
+            calls.index(("sync", local_date)) < first_fetch
+            for local_date in (
+                "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"
+            )
+        ))
+
+    def test_refresh_never_overlaps_mutating_source_syncs(self):
+        lock = threading.Lock()
+        active_syncs = 0
+        max_active_syncs = 0
+
+        class ThrottleSensitiveClient:
+            def sync_day(client_self, local_date):
+                nonlocal active_syncs, max_active_syncs
+                with lock:
+                    active_syncs += 1
+                    max_active_syncs = max(max_active_syncs, active_syncs)
+                time.sleep(0.005)
+                with lock:
+                    active_syncs -= 1
+
+            def fetch_day(client_self, local_date):
+                fresh = payload()
+                fresh["lastSyncedAt"] = dt.datetime.now(dt.timezone.utc).isoformat()
+                return fresh
+
+        snapshot = refresh_party_demand(
+            "friday", "2026-08-07",
+            client=ThrottleSensitiveClient(), persist=False,
+        )
+
+        self.assertTrue(snapshot["can_generate"])
+        self.assertEqual(max_active_syncs, 1)
+
+    def test_event_kitchen_sync_retries_a_transient_502(self):
+        class JsonResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b'{"ok": true}'
+
+        client = EventKitchenClient(session_cookie="session=test")
+        transient = urllib.error.HTTPError(
+            client.base_url, 502, "Bad Gateway", {}, None
+        )
+        with patch.object(
+            client.opener, "open", side_effect=[transient, JsonResponse()]
+        ) as opened, patch("party_demand.time.sleep") as slept:
+            result = client.sync_day("2026-08-29")
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(opened.call_count, 2)
+        slept.assert_called_once_with(0.5)
+
+    def test_event_kitchen_sync_does_not_retry_an_auth_failure(self):
+        client = EventKitchenClient(session_cookie="session=test")
+        denied = urllib.error.HTTPError(
+            client.base_url, 401, "Unauthorized", {}, None
+        )
+        with patch.object(client.opener, "open", side_effect=denied) as opened, \
+                patch("party_demand.time.sleep") as slept:
+            with self.assertRaisesRegex(PartyDemandError, "HTTP Error 401"):
+                client.sync_day("2026-08-29")
+
+        self.assertEqual(opened.call_count, 1)
+        slept.assert_not_called()
 
     def test_refresh_blocks_an_old_source_timestamp(self):
         class StaleClient:

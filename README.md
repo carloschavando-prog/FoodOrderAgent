@@ -316,7 +316,9 @@ as stale and order generation is blocked. Unmapped food and Event Kitchen
 requires a reason and is recorded in `party_demand_overrides` before the order
 report is generated. A refresh first invokes Event Kitchen's authenticated
 Tripleseat sync for each date in the delivery window, then reloads the window
-without cache. Source timestamps older than `PARTY_SOURCE_MAX_AGE_MINUTES`
+without cache. Mutating sync requests are serialized and transient 429/5xx or
+network failures receive bounded exponential-backoff retries; the read-only day
+loads remain parallel. Source timestamps older than `PARTY_SOURCE_MAX_AGE_MINUTES`
 (60 minutes by default) are treated as stale and cannot be presented as a
 successful refresh.
 

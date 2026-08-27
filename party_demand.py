@@ -12,6 +12,8 @@ import json
 import math
 import os
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import defaultdict
@@ -34,6 +36,9 @@ EVENT_PREP_BASE_URL = os.environ.get(
 SOURCE_MAX_AGE_MINUTES = float(
     os.environ.get("PARTY_SOURCE_MAX_AGE_MINUTES", "60")
 )
+SOURCE_SYNC_MAX_ATTEMPTS = 3
+SOURCE_SYNC_RETRY_BASE_SECONDS = 0.5
+TRANSIENT_SOURCE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 EXCLUDED_EVENT_IDS = frozenset(filter(None, (
     value.strip()
     for value in os.environ.get("PARTY_EXCLUDED_EVENT_IDS", "").split(",")
@@ -297,26 +302,59 @@ class EventKitchenClient:
     def sync_day(self, local_date):
         """Force Event Kitchen to synchronize the selected date from Tripleseat."""
         self.authenticate()
-        request = urllib.request.Request(
-            f"{self.base_url}/api/kitchen/sync",
-            data=json.dumps({"date": str(local_date)}).encode("utf-8"),
-            headers={
-                "Accept": "application/json",
-                "Cache-Control": "no-cache",
-                "Content-Type": "application/json",
-                "Pragma": "no-cache",
-                "User-Agent": "On-Par-FoodOrder/party-demand-v1",
-            },
-            method="POST",
-        )
-        try:
-            with self.opener.open(request, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            raise PartyDemandError(
-                f"Unable to sync Event Kitchen from Tripleseat for "
-                f"{local_date}: {exc}"
-            ) from exc
+        payload = None
+        for attempt in range(1, SOURCE_SYNC_MAX_ATTEMPTS + 1):
+            request = urllib.request.Request(
+                f"{self.base_url}/api/kitchen/sync",
+                data=json.dumps({"date": str(local_date)}).encode("utf-8"),
+                headers={
+                    "Accept": "application/json",
+                    "Cache-Control": "no-cache",
+                    "Content-Type": "application/json",
+                    "Pragma": "no-cache",
+                    "User-Agent": "On-Par-FoodOrder/party-demand-v1",
+                },
+                method="POST",
+            )
+            try:
+                with self.opener.open(request, timeout=self.timeout) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except Exception as exc:
+                status_code = (
+                    exc.code if isinstance(exc, urllib.error.HTTPError) else None
+                )
+                retryable = (
+                    status_code in TRANSIENT_SOURCE_STATUS_CODES
+                    or (
+                        not isinstance(exc, urllib.error.HTTPError)
+                        and isinstance(exc, (urllib.error.URLError, TimeoutError))
+                    )
+                )
+                if retryable and attempt < SOURCE_SYNC_MAX_ATTEMPTS:
+                    retry_after = (
+                        exc.headers.get("Retry-After")
+                        if isinstance(exc, urllib.error.HTTPError) and exc.headers
+                        else None
+                    )
+                    try:
+                        delay = float(retry_after)
+                    except (TypeError, ValueError):
+                        delay = SOURCE_SYNC_RETRY_BASE_SECONDS * (2 ** (attempt - 1))
+                    _log_party_event(
+                        "source_sync_retry",
+                        local_date=str(local_date),
+                        attempt=attempt,
+                        next_attempt=attempt + 1,
+                        status_code=status_code,
+                        retry_delay_seconds=delay,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise PartyDemandError(
+                    f"Unable to sync Event Kitchen from Tripleseat for "
+                    f"{local_date}: {exc}"
+                ) from exc
         if not isinstance(payload, dict):
             raise PartyDemandError(
                 f"Event Kitchen returned an invalid sync response for "
@@ -925,8 +963,12 @@ def refresh_party_demand(cycle, delivery_date=None, client=None, persist=True):
         if callable(sync_day) and callable(authenticate):
             authenticate()
 
-        def load_source_day(local_date):
-            if callable(sync_day):
+        # Tripleseat throttles mutating synchronization requests. Running one
+        # POST per coverage date concurrently caused intermittent upstream 502s
+        # and discarded otherwise healthy windows. Serialize only those writes;
+        # the cache-backed day reads below remain parallel for response time.
+        if callable(sync_day):
+            for local_date in window["dates"]:
                 _log_party_event(
                     "source_sync_started",
                     refresh_id=refresh_id,
@@ -938,6 +980,8 @@ def refresh_party_demand(cycle, delivery_date=None, client=None, persist=True):
                     refresh_id=refresh_id,
                     local_date=local_date,
                 )
+
+        def load_source_day(local_date):
             payload = source.fetch_day(local_date)
             _log_party_event(
                 "source_day_loaded",
