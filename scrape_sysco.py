@@ -154,6 +154,9 @@ def get_bearer_token(email, password):
     Fast path: if SYSCO_COOKIES env var is set (JSON dict of key→value or
     a cookie header string), calls auth/validate directly without Okta.
     """
+    if os.getenv("SYSCO_SHARED_AUTH", "").lower() == "true":
+        from api.place_order_sysco import authenticate_shared_sysco
+        return authenticate_shared_sysco()
     # ── Fast path: session cookies already captured ───────────────────────────
     sysco_cookies_raw = os.getenv("SYSCO_COOKIES", "")
     if sysco_cookies_raw:
@@ -835,14 +838,16 @@ def main():
     print("── Sysco Price Scraper ────────────────────────────────")
 
     password = os.getenv("SYSCO_PASSWORD", "")
-    # SYSCO_COOKIES (session cookie fast path) doesn't need the password
-    if not password and not os.getenv("SYSCO_COOKIES"):
+    shared_auth = os.getenv("SYSCO_SHARED_AUTH", "").lower() == "true"
+    # Hosted shared sign-in and session cookies do not need a password.
+    if not shared_auth and not password and not os.getenv("SYSCO_COOKIES"):
         print("❌ SYSCO_PASSWORD env var not set (and no SYSCO_COOKIES fallback).")
         print("   Set SYSCO_PASSWORD in CI secrets, or run intercept_sysco5.py and set SYSCO_COOKIES.")
         sys.exit(1)
 
     # 1. Authenticate
-    print("\n→ Authenticating via Okta SAML2 ...")
+    print("\n→ Verifying hosted Sysco sign-in ..." if shared_auth
+          else "\n→ Authenticating via Okta SAML2 ...")
     bearer, shop_account_id, csrf_token, vid = get_bearer_token(EMAIL, password)
     print(f"  shopAccountId: {shop_account_id}")
 

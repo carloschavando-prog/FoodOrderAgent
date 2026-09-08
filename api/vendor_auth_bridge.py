@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from api.vendor_auth import VendorAuthClient
 
 
-ALLOWED_VENDOR_IDS = {1, 2}
+ALLOWED_VENDOR_IDS = {1, 2, 3}
 
 
 class handler(BaseHTTPRequestHandler):

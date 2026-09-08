@@ -112,7 +112,7 @@ def _decode_gateway_credentials(validate_response):
     )
 
 
-def _validate_with_cookies(cookie_string):
+def _validate_with_cookies(cookie_string, *, require_account=False):
     request = urllib.request.Request(
         f"{AUTH_BASE}/api/v1/auth/validate",
         headers={
@@ -131,7 +131,26 @@ def _validate_with_cookies(cookie_string):
         raise RuntimeError(
             f"Sysco cookie validation failed (HTTP {ex.code}): {body or ex.reason}"
         ) from ex
+    if require_account and validate_response.get("shopAccountId") != SHOP_ACCOUNT_ID:
+        raise RuntimeError("Sysco sign-in is not for the configured restaurant account")
     return _decode_gateway_credentials(validate_response)
+
+
+def authenticate_shared_sysco():
+    """Read the hosted sign-in through the existing shared credential lease."""
+    from api.vendor_auth import VendorAuthClient
+
+    lease = VendorAuthClient.from_env().claim(3)
+    try:
+        cookies = lease.credentials.get("cookies", "")
+        if not isinstance(cookies, str) or not cookies:
+            raise RuntimeError("Sysco shared sign-in is not configured")
+        result = _validate_with_cookies(cookies, require_account=True)
+        lease.commit(lease.credentials, verified=True)
+        return result
+    except Exception:
+        lease.fail("Sysco shared sign-in could not be verified; reconnect Sysco")
+        raise
 
 
 def _open_json(opener, request, stage, timeout=20):
@@ -342,6 +361,8 @@ def _complete_idx_password(opener, state_token, email, password):
 
 def get_bearer_token(email, password):
     """Authenticate with a current session cookie or Okta SAML and return API context."""
+    if os.getenv("SYSCO_SHARED_AUTH", "").lower() == "true":
+        return authenticate_shared_sysco()
     cookies_raw = os.getenv("SYSCO_COOKIES", "").strip()
     if cookies_raw:
         try:
